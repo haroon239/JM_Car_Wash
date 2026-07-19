@@ -12,8 +12,19 @@ export async function findCustomers(view: "active" | "archived" | "all") {
     await requireDatabase().query(`
     SELECT c.id, c.name, c.phone, c.email, c.plate_number AS "plateNumber",
       c.plan_start_date AS "planStartDate", c.status, c.deleted_at AS "archivedAt",
-      p.name AS plan, p.price
+      p.name AS plan, p.price, current_invoice.status AS "invoiceStatus",
+      current_invoice.due_date AS "invoiceDueDate"
     FROM customers c LEFT JOIN plans p ON p.id=c.plan_id
+    LEFT JOIN LATERAL (
+      SELECT i.status, i.due_date
+      FROM invoices i
+      WHERE i.customer_id = c.id
+        AND i.billing_month = DATE_TRUNC(
+          'month', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dubai'
+        )::DATE
+      ORDER BY i.id DESC
+      LIMIT 1
+    ) current_invoice ON TRUE
     WHERE ${condition} ORDER BY c.created_at DESC
   `)
   ).rows;

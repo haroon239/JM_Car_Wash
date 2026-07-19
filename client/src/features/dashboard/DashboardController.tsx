@@ -25,6 +25,29 @@ const planPrices: Record<string, number> = {
   Corporate: 1249,
 };
 
+function normalizeInvoiceStatus(status?: string | null): Customer["status"] {
+  switch (status?.toLowerCase()) {
+    case "paid":
+      return "Paid";
+    case "sent":
+      return "Sent";
+    case "overdue":
+      return "Overdue";
+    default:
+      return "Pending";
+  }
+}
+
+function formatDueDate(date?: string | null) {
+  if (!date) return "Not generated";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Dubai",
+  }).format(new Date(date));
+}
+
 const initialCustomers: Customer[] = [
   {
     id: 1048,
@@ -191,6 +214,8 @@ export function DashboardController() {
               archivedAt?: string | null;
               plan?: string;
               price?: string | number;
+              invoiceStatus?: string | null;
+              invoiceDueDate?: string | null;
             }) => ({
               id: Number(customer.id),
               name: customer.name,
@@ -200,8 +225,8 @@ export function DashboardController() {
               planStartDate: customer.planStartDate?.slice(0, 10) ?? "",
               archivedAt: customer.archivedAt,
               amount: Number(customer.price ?? 0),
-              due: "01 Aug 2026",
-              status: "Pending" as const,
+              due: formatDueDate(customer.invoiceDueDate),
+              status: normalizeInvoiceStatus(customer.invoiceStatus),
             }),
           ),
         );
@@ -318,6 +343,11 @@ export function DashboardController() {
         ),
       );
       setActiveInvoice({ ...activeInvoice, status: "sent", sentAt: new Date().toISOString() });
+      setCustomers((current) =>
+        current.map((item) =>
+          item.id === customer.id ? { ...item, status: "Sent" as const } : item,
+        ),
+      );
       setNotice(`Invoice ${activeInvoice.invoiceNumber} marked as sent by Admin.`);
     } catch (error) {
       setNotice(
@@ -349,7 +379,15 @@ export function DashboardController() {
           : [invoice, ...current],
       );
       setActiveInvoice(invoice);
-      setActive(customer);
+      const updatedCustomer = {
+        ...customer,
+        due: formatDueDate(invoice.dueDate),
+        status: normalizeInvoiceStatus(invoice.status),
+      };
+      setCustomers((current) =>
+        current.map((item) => (item.id === customer.id ? updatedCustomer : item)),
+      );
+      setActive(updatedCustomer);
       if (row.wasExisting)
         setNotice(`Existing invoice ${invoice.invoiceNumber} opened for this month.`);
     } catch (error) {
@@ -401,6 +439,11 @@ export function DashboardController() {
         current.map((item) => (item.id === invoice.id ? { ...item, status: "paid" } : item)),
       );
       if (activeInvoice?.id === invoice.id) setActiveInvoice({ ...activeInvoice, status: "paid" });
+      setCustomers((current) =>
+        current.map((customer) =>
+          customer.id === invoice.customerId ? { ...customer, status: "Paid" as const } : customer,
+        ),
+      );
       setNotice(`${invoice.invoiceNumber} marked paid via ${method.replace("_", " ")}.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Unable to record payment.", "error");

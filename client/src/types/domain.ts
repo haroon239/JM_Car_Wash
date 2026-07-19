@@ -7,7 +7,7 @@ export type Customer = {
   amount: number;
   due: string;
   planStartDate: string;
-  status: "Paid" | "Pending" | "Overdue";
+  status: "Paid" | "Pending" | "Sent" | "Overdue";
   archivedAt?: string | null;
 };
 export type CustomerForm = Pick<Customer, "name" | "phone" | "plate" | "plan" | "planStartDate">;
