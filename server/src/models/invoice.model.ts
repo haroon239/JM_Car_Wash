@@ -165,7 +165,11 @@ export async function markPastDueInvoicesOverdue() {
 export async function updateInvoiceStatus(id: number, status: string) {
   return (
     await requireDatabase().query(
-      `UPDATE invoices SET status=$1,sent_at=CASE WHEN $1='sent' THEN NOW() ELSE sent_at END WHERE id=$2 RETURNING id,status,sent_at AS "sentAt"`,
+      `UPDATE invoices
+       SET status=$1::VARCHAR,
+         sent_at=CASE WHEN $1::VARCHAR='sent' THEN NOW() ELSE sent_at END
+       WHERE id=$2
+       RETURNING id,status,sent_at AS "sentAt"`,
       [status, id],
     )
   ).rows[0];
