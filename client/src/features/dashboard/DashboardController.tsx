@@ -274,15 +274,13 @@ export function DashboardController() {
   function openWhatsApp(customer: Customer) {
     const invoice =
       activeInvoice?.invoiceNumber ?? `JMCW-${new Date().getFullYear()}-${customer.id}`;
-    const message = `Hello ${customer.name}, your JM Car Wash invoice ${invoice} for AED ${customer.amount.toFixed(2)} is ready. Please find the invoice attached. Thank you.`;
+    const message = `Hello ${customer.name}, your JM Car Wash invoice ${invoice} for AED ${customer.amount.toFixed(2)} is ready. Thank you.`;
     window.open(
       `https://wa.me/${customer.phone}?text=${encodeURIComponent(message)}`,
       "_blank",
       "noopener,noreferrer",
     );
-    setNotice(
-      `WhatsApp opened for ${customer.name}. Attach the downloaded invoice and press Send.`,
-    );
+    setNotice(`WhatsApp opened for ${customer.name}. Review the message and press Send.`);
   }
 
   async function markSent(customer: Customer) {
