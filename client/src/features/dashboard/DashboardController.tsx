@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { Notice, type NoticeKind } from "../../components/common/Notice";
@@ -96,6 +96,7 @@ const initialCustomers: Customer[] = [
 ];
 
 export function DashboardController() {
+  const invoicePaperRef = useRef<HTMLDivElement>(null);
   const [customers, setCustomers] = useState(initialCustomers);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<Customer | null>(null);
@@ -308,50 +309,111 @@ export function DashboardController() {
     setNotice(`WhatsApp opened for ${customer.name}. Review the message and press Send.`);
   }
 
-  function printInvoice(customer: Customer) {
-    const originalTitle = document.title;
+  function invoiceFileName(customer: Customer) {
     const cleanFilePart = (value: string) => value.replace(/[\\/:*?"<>|]+/g, "-").trim();
-    document.title = [
+    return [
       cleanFilePart(customer.name),
       cleanFilePart(settings.companyName),
       cleanFilePart(activeInvoice?.invoiceNumber ?? "Invoice"),
     ].join(" - ");
-
-    const restoreTitle = () => {
-      document.title = originalTitle;
-      window.removeEventListener("afterprint", restoreTitle);
-    };
-
-    window.addEventListener("afterprint", restoreTitle);
-    window.print();
   }
 
-  async function markSent(customer: Customer) {
+  async function shareInvoice(customer: Customer) {
+    if (!activeInvoice || !invoicePaperRef.current) return;
+    setIsSaving(true);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const canvas = await html2canvas(invoicePaperRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+      });
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const margin = 10;
+      const pageWidth = pdf.internal.pageSize.getWidth() - margin * 2;
+      const pageHeight = pdf.internal.pageSize.getHeight() - margin * 2;
+      const imageRatio = canvas.width / canvas.height;
+      let imageWidth = pageWidth;
+      let imageHeight = imageWidth / imageRatio;
+      if (imageHeight > pageHeight) {
+        imageHeight = pageHeight;
+        imageWidth = imageHeight * imageRatio;
+      }
+      pdf.addImage(
+        canvas.toDataURL("image/png"),
+        "PNG",
+        (pdf.internal.pageSize.getWidth() - imageWidth) / 2,
+        margin,
+        imageWidth,
+        imageHeight,
+      );
+
+      const fileName = `${invoiceFileName(customer)}.pdf`;
+      const file = new File([pdf.output("blob")], fileName, { type: "application/pdf" });
+      const shareData = {
+        title: activeInvoice.invoiceNumber,
+        text: `Invoice ${activeInvoice.invoiceNumber} from ${settings.companyName}`,
+        files: [file],
+      };
+
+      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        await navigator.share(shareData);
+        setNotice("Invoice shared. Mark it as sent after confirming delivery.");
+      } else {
+        pdf.save(fileName);
+        setNotice("PDF downloaded because file sharing is not supported by this browser.");
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setNotice(error instanceof Error ? error.message : "Unable to share invoice.", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function toggleSent(customer: Customer) {
     if (!activeInvoice) return;
+    const isUnsend = activeInvoice.status.toLowerCase() === "sent";
+    const nextStatus = isUnsend ? "pending" : "sent";
     try {
       const response = await fetch(`/api/invoices/${activeInvoice.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "sent" }),
+        body: JSON.stringify({ status: nextStatus }),
       });
       if (!response.ok) throw new Error("Unable to update invoice status");
       setInvoices((current) =>
         current.map((invoice) =>
           invoice.id === activeInvoice.id
-            ? { ...invoice, status: "sent", sentAt: new Date().toISOString() }
+            ? {
+                ...invoice,
+                status: nextStatus,
+                sentAt: isUnsend ? null : new Date().toISOString(),
+              }
             : invoice,
         ),
       );
-      setActiveInvoice({ ...activeInvoice, status: "sent", sentAt: new Date().toISOString() });
+      setActiveInvoice({
+        ...activeInvoice,
+        status: nextStatus,
+        sentAt: isUnsend ? null : new Date().toISOString(),
+      });
       setCustomers((current) =>
         current.map((item) =>
-          item.id === customer.id ? { ...item, status: "Sent" as const } : item,
+          item.id === customer.id
+            ? { ...item, status: isUnsend ? ("Pending" as const) : ("Sent" as const) }
+            : item,
         ),
       );
-      setNotice(`Invoice ${activeInvoice.invoiceNumber} marked as sent by Admin.`);
+      setNotice(
+        `Invoice ${activeInvoice.invoiceNumber} marked as ${isUnsend ? "unsent" : "sent"} by Admin.`,
+      );
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Unable to mark invoice as sent.",
+        error instanceof Error ? error.message : "Unable to update invoice delivery status.",
         "error",
       );
     }
@@ -1187,7 +1249,7 @@ export function DashboardController() {
                 ×
               </button>
             </div>
-            <div className="invoice-paper">
+            <div className="invoice-paper" ref={invoicePaperRef}>
               <div className="invoice-brand">
                 <div className="brand-mark">JM</div>
                 <div>
@@ -1273,30 +1335,38 @@ export function DashboardController() {
             <div className="send-steps">
               <p>
                 <span>1</span>
-                <b>Download invoice</b>
-                <small>Save this invoice as PDF</small>
+                <b>Share invoice PDF</b>
+                <small>Generate the PDF securely</small>
               </p>
               <p>
                 <span>2</span>
-                <b>Open WhatsApp</b>
-                <small>Message is prepared for you</small>
+                <b>Select WhatsApp</b>
+                <small>Choose it from the share menu</small>
               </p>
               <p>
                 <span>3</span>
-                <b>Attach & send</b>
-                <small>Select the PDF and press Send</small>
+                <b>Confirm delivery</b>
+                <small>Then mark the invoice as sent</small>
               </p>
             </div>
             <div className="modal-actions">
-              <button className="secondary" onClick={() => printInvoice(active)}>
-                ↓ Download / Print PDF
+              <button
+                className="secondary"
+                disabled={isSaving}
+                onClick={() => void shareInvoice(active)}
+              >
+                {isSaving ? "Preparing PDF..." : "Share invoice PDF"}
               </button>
               <button className="whatsapp" onClick={() => openWhatsApp(active)}>
                 Open in WhatsApp ↗
               </button>
-              <button className="primary" onClick={() => void markSent(active)}>
-                ✓ Mark as sent
-              </button>
+              {activeInvoice?.status.toLowerCase() !== "paid" && (
+                <button className="primary" onClick={() => void toggleSent(active)}>
+                  {activeInvoice?.status.toLowerCase() === "sent"
+                    ? "Mark as unsent"
+                    : "✓ Mark as sent"}
+                </button>
+              )}
             </div>
           </section>
         </div>

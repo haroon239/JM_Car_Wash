@@ -167,7 +167,11 @@ export async function updateInvoiceStatus(id: number, status: string) {
     await requireDatabase().query(
       `UPDATE invoices
        SET status=$1::VARCHAR,
-         sent_at=CASE WHEN $1::VARCHAR='sent' THEN NOW() ELSE sent_at END
+         sent_at=CASE
+           WHEN $1::VARCHAR='sent' THEN NOW()
+           WHEN $1::VARCHAR='pending' THEN NULL
+           ELSE sent_at
+         END
        WHERE id=$2
        RETURNING id,status,sent_at AS "sentAt"`,
       [status, id],
