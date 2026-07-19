@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import { fileURLToPath } from "node:url";
 import { env } from "./config/env.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js";
 import { apiRouter } from "./routes/index.js";
@@ -9,5 +10,8 @@ app.disable("x-powered-by");
 app.use(cors({ origin: env.clientUrl }));
 app.use(express.json({ limit: "1mb" }));
 app.use("/api", apiRouter);
+const clientDist = fileURLToPath(new URL("../../client/dist", import.meta.url));
+app.use(express.static(clientDist));
+app.get("/{*splat}", (_request, response) => response.sendFile("index.html", { root: clientDist }));
 app.use(notFoundHandler);
 app.use(errorHandler);

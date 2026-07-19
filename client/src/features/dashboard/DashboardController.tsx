@@ -8,7 +8,7 @@ import { InvoicesPage } from "../../pages/InvoicesPage";
 import { PaymentsPage } from "../../pages/PaymentsPage";
 import { PlansPage } from "../../pages/PlansPage";
 import { SettingsPage } from "../../pages/SettingsPage";
-import type { Customer, CustomerForm, Invoice, Payment, Plan, Section } from "../../types/domain";
+import type { CompanySettings, Customer, CustomerForm, Invoice, Payment, Plan, Section } from "../../types/domain";
 
 const planPrices: Record<string, number> = { Basic: 99, Standard: 199, Premium: 299, Corporate: 1249 };
 
@@ -37,13 +37,15 @@ export function DashboardController() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [activeInvoice, setActiveInvoice] = useState<Invoice | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [settings, setSettings] = useState<CompanySettings>({companyName:"JM Car Wash",trn:"",address:"United Arab Emirates",invoicePrefix:"JMCW",vatRate:5});
 
   useEffect(() => {
     async function loadDatabaseData() {
       try {
-        const [customersResponse, plansResponse, invoicesResponse, paymentsResponse] = await Promise.all([fetch("/api/customers?view=all"), fetch("/api/plans"), fetch("/api/invoices"), fetch("/api/payments")]);
-        if (!customersResponse.ok || !plansResponse.ok || !invoicesResponse.ok || !paymentsResponse.ok) return;
-        const [customerRows, planRows, invoiceRows, paymentRows] = await Promise.all([customersResponse.json(), plansResponse.json(), invoicesResponse.json(), paymentsResponse.json()]);
+        const [customersResponse, plansResponse, invoicesResponse, paymentsResponse,settingsResponse] = await Promise.all([fetch("/api/customers?view=all"), fetch("/api/plans"), fetch("/api/invoices"), fetch("/api/payments"),fetch("/api/settings")]);
+        if (!customersResponse.ok || !plansResponse.ok || !invoicesResponse.ok || !paymentsResponse.ok||!settingsResponse.ok) return;
+        const [customerRows, planRows, invoiceRows, paymentRows,settingsRow] = await Promise.all([customersResponse.json(), plansResponse.json(), invoicesResponse.json(), paymentsResponse.json(),settingsResponse.json()]);
+        setSettings({...settingsRow,vatRate:Number(settingsRow.vatRate)});
         const normalizedPlans: Plan[] = planRows.map((plan: { id: string | number; name: string; price: string | number; washesPerMonth: number | null }) => ({ id: Number(plan.id), name: plan.name, price: Number(plan.price), washesPerMonth: plan.washesPerMonth }));
         setPlans(normalizedPlans);
         setInvoices(invoiceRows.map((invoice: Record<string, string | number | null>) => ({ ...invoice, id: Number(invoice.id), customerId: Number(invoice.customerId), total: Number(invoice.total) })) as Invoice[]);
@@ -58,6 +60,8 @@ export function DashboardController() {
     }
     void loadDatabaseData();
   }, []);
+
+  async function saveCompanySettings(){setIsSaving(true);try{const response=await fetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(settings)});if(!response.ok)throw new Error((await response.json()).message??"Unable to save settings");const saved=await response.json();setSettings({...saved,vatRate:Number(saved.vatRate)});setNotice("Company and invoice settings saved.");}catch(error){setNotice(error instanceof Error?error.message:"Unable to save settings.");}finally{setIsSaving(false);}}
 
   const activeCustomers = useMemo(() => customers.filter((customer) => !customer.archivedAt), [customers]);
   const filtered = useMemo(() => activeCustomers.filter((customer) =>
@@ -224,7 +228,7 @@ export function DashboardController() {
 
         {section === "payments" && <PaymentsPage payments={payments} invoices={invoices}/>} 
 
-        {section === "settings" && <SettingsPage onSave={()=>setNotice("Company settings saved for this session.")}/>} 
+        {section === "settings" && <SettingsPage settings={settings} isSaving={isSaving} onChange={setSettings} onSave={()=>void saveCompanySettings()}/>} 
 
         <div className="stats">
           <article><div className="stat-icon aqua">♙</div><div><small>ACTIVE CUSTOMERS</small><strong>776</strong><p><em>+12</em> this month</p></div></article>
@@ -273,10 +277,10 @@ export function DashboardController() {
       {active && <div className="modal-backdrop" onMouseDown={() => { setActive(null); setActiveInvoice(null); }}><section className="invoice-modal" onMouseDown={(event) => event.stopPropagation()}>
         <div className="modal-head"><div><span className="ready">READY TO SEND</span><h2>Invoice {activeInvoice?.invoiceNumber}</h2><p>Review the invoice before sharing it with the customer.</p></div><button onClick={() => { setActive(null); setActiveInvoice(null); }}>×</button></div>
         <div className="invoice-paper">
-          <div className="invoice-brand"><div className="brand-mark">JM</div><div><strong>JM CAR WASH</strong><small>Premium vehicle care</small></div><h3>TAX INVOICE</h3></div>
+          <div className="invoice-brand"><div className="brand-mark">JM</div><div><strong>{settings.companyName.toUpperCase()}</strong><small>{settings.address}{settings.trn?` · TRN ${settings.trn}`:""}</small></div><h3>TAX INVOICE</h3></div>
           <div className="invoice-meta"><div><small>BILL TO</small><strong>{active.name}</strong><p>{active.phone}<br/>{active.plate}</p></div><div><p><span>Invoice no.</span><b>{activeInvoice?.invoiceNumber}</b></p><p><span>Issue date</span><b>{activeInvoice ? new Date(activeInvoice.issueDate).toLocaleDateString("en-GB") : "—"}</b></p><p><span>Due date</span><b>{activeInvoice ? new Date(activeInvoice.dueDate).toLocaleDateString("en-GB") : "—"}</b></p></div></div>
-          <table><thead><tr><th>Description</th><th>Qty</th><th>VAT</th><th>Amount</th></tr></thead><tbody><tr><td><strong>{active.plan} Car Wash Plan</strong><small>Monthly subscription · August 2026</small></td><td>1</td><td>5%</td><td>AED {(active.amount / 1.05).toFixed(2)}</td></tr></tbody></table>
-          <div className="totals"><p><span>Subtotal</span><b>AED {(active.amount / 1.05).toFixed(2)}</b></p><p><span>VAT 5%</span><b>AED {(active.amount - active.amount / 1.05).toFixed(2)}</b></p><p className="total"><span>Total due</span><b>AED {active.amount.toFixed(2)}</b></p></div>
+          <table><thead><tr><th>Description</th><th>Qty</th><th>VAT</th><th>Amount</th></tr></thead><tbody><tr><td><strong>{active.plan} Car Wash Plan</strong><small>Monthly subscription</small></td><td>1</td><td>{settings.vatRate}%</td><td>AED {(active.amount/(1+settings.vatRate/100)).toFixed(2)}</td></tr></tbody></table>
+          <div className="totals"><p><span>Subtotal</span><b>AED {(active.amount/(1+settings.vatRate/100)).toFixed(2)}</b></p><p><span>VAT {settings.vatRate}%</span><b>AED {(active.amount-active.amount/(1+settings.vatRate/100)).toFixed(2)}</b></p><p className="total"><span>Total due</span><b>AED {active.amount.toFixed(2)}</b></p></div>
         </div>
         <div className="send-steps"><p><span>1</span><b>Download invoice</b><small>Save this invoice as PDF</small></p><p><span>2</span><b>Open WhatsApp</b><small>Message is prepared for you</small></p><p><span>3</span><b>Attach & send</b><small>Select the PDF and press Send</small></p></div>
         <div className="modal-actions"><button className="secondary" onClick={() => window.print()}>↓ Download / Print PDF</button><button className="whatsapp" onClick={() => openWhatsApp(active)}>Open in WhatsApp ↗</button><button className="primary" onClick={() => void markSent(active)}>✓ Mark as sent</button></div>

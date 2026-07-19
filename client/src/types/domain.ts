@@ -5,3 +5,4 @@ export type Invoice = { id:number; invoiceNumber:string; customerId:number; cust
 export type Payment = { id:number; invoiceId:number; invoiceNumber:string; customerName:string; amount:number; method:string; reference?:string|null; paidAt:string; recordedBy:string };
 export type Section = "overview"|"customers"|"plans"|"invoices"|"payments"|"settings";
 export type CustomerView = "active"|"archived"|"all";
+export type CompanySettings = { companyName:string; trn:string; address:string; invoicePrefix:string; vatRate:number };
