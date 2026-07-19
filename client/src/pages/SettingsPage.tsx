@@ -1,3 +1,75 @@
-import type{CompanySettings}from"../types/domain";
-type Props={settings:CompanySettings;isSaving:boolean;onChange:(value:CompanySettings)=>void;onSave:()=>void};
-export function SettingsPage({settings,isSaving,onChange,onSave}:Props){const field=(key:keyof CompanySettings,value:string)=>onChange({...settings,[key]:key==="vatRate"?Number(value):value});return <section className="panel section-panel settings-card"><div className="panel-head"><div><h2>Company & tax information</h2><p>This information appears on every generated tax invoice.</p></div></div><form onSubmit={e=>{e.preventDefault();onSave();}}><label><span>Company name</span><input required value={settings.companyName} onChange={e=>field("companyName",e.target.value)}/></label><label><span>Tax Registration Number (TRN)</span><input value={settings.trn} onChange={e=>field("trn",e.target.value)} placeholder="15-digit UAE TRN"/></label><label><span>Business address</span><input required value={settings.address} onChange={e=>field("address",e.target.value)}/></label><label><span>Invoice prefix</span><input required value={settings.invoicePrefix} onChange={e=>field("invoicePrefix",e.target.value.toUpperCase())}/></label><label><span>VAT rate (%)</span><input required type="number" min="0" max="100" step="0.01" value={settings.vatRate} onChange={e=>field("vatRate",e.target.value)}/></label><button type="submit" className="primary" disabled={isSaving}>{isSaving?"Saving…":"Save settings"}</button></form></section>}
+import type { CompanySettings } from "../types/domain";
+type Props = {
+  settings: CompanySettings;
+  isSaving: boolean;
+  onChange: (value: CompanySettings) => void;
+  onSave: () => void;
+};
+export function SettingsPage({ settings, isSaving, onChange, onSave }: Props) {
+  const field = (key: keyof CompanySettings, value: string) =>
+    onChange({ ...settings, [key]: key === "vatRate" ? Number(value) : value });
+  return (
+    <section className="panel section-panel settings-card">
+      <div className="panel-head">
+        <div>
+          <h2>Company & tax information</h2>
+          <p>This information appears on every generated tax invoice.</p>
+        </div>
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave();
+        }}
+      >
+        <label>
+          <span>Company name</span>
+          <input
+            required
+            value={settings.companyName}
+            onChange={(e) => field("companyName", e.target.value)}
+          />
+        </label>
+        <label>
+          <span>Tax Registration Number (TRN)</span>
+          <input
+            value={settings.trn}
+            onChange={(e) => field("trn", e.target.value)}
+            placeholder="15-digit UAE TRN"
+          />
+        </label>
+        <label>
+          <span>Business address</span>
+          <input
+            required
+            value={settings.address}
+            onChange={(e) => field("address", e.target.value)}
+          />
+        </label>
+        <label>
+          <span>Invoice prefix</span>
+          <input
+            required
+            value={settings.invoicePrefix}
+            onChange={(e) => field("invoicePrefix", e.target.value.toUpperCase())}
+          />
+        </label>
+        <label>
+          <span>VAT rate (%)</span>
+          <input
+            required
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            value={settings.vatRate}
+            onChange={(e) => field("vatRate", e.target.value)}
+          />
+        </label>
+        <button type="submit" className="primary" disabled={isSaving}>
+          {isSaving ? "Saving…" : "Save settings"}
+        </button>
+      </form>
+    </section>
+  );
+}

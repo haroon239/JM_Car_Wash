@@ -13,7 +13,7 @@ const sqlPaths = [
   fileURLToPath(new URL("../../sql/002_customer_plan_start_date.sql", import.meta.url)),
   fileURLToPath(new URL("../../sql/003_payments.sql", import.meta.url)),
   fileURLToPath(new URL("../../sql/004_company_settings.sql", import.meta.url)),
-  fileURLToPath(new URL("../../sql/005_unique_monthly_invoices.sql", import.meta.url))
+  fileURLToPath(new URL("../../sql/005_unique_monthly_invoices.sql", import.meta.url)),
 ];
 const client = new pg.Client({ connectionString });
 
