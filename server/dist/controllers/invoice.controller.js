@@ -1,0 +1,14 @@
+import * as invoiceModel from "../models/invoice.model.js";
+import { idSchema } from "../validators/customer.schema.js";
+import { invoiceStatusSchema } from "../validators/payment.schema.js";
+export async function listInvoices(_request, response) { response.json(await invoiceModel.findInvoices()); }
+export async function createInvoice(request, response) {
+    const customerId = idSchema.parse(request.body.customerId);
+    response.status(201).json(await invoiceModel.createInvoice(customerId));
+}
+export async function updateInvoiceStatus(request, response) {
+    const result = await invoiceModel.updateInvoiceStatus(idSchema.parse(request.params.id), invoiceStatusSchema.parse(request.body).status);
+    if (!result)
+        throw Object.assign(new Error("Invoice not found"), { status: 404 });
+    response.json(result);
+}
