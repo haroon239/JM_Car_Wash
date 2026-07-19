@@ -16,18 +16,28 @@ export async function createInvoice(customerId: number) {
     await client.query("BEGIN");
     const customer = await client.query(`SELECT c.id,c.name,c.phone,c.plate_number,p.name AS plan_name,p.price FROM customers c JOIN plans p ON p.id=c.plan_id WHERE c.id=$1 AND c.deleted_at IS NULL`, [customerId]);
     if (!customer.rowCount) throw Object.assign(new Error("Active customer not found"), { status: 404 });
+    const existing = await client.query(`SELECT id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate",sent_at AS "sentAt" FROM invoices WHERE customer_id=$1 AND billing_month=DATE_TRUNC('month',CURRENT_DATE)::DATE`, [customerId]);
+    if (existing.rowCount) {
+      await client.query("COMMIT");
+      return { ...existing.rows[0], customerName: customer.rows[0].name, phone: customer.rows[0].phone, plateNumber: customer.rows[0].plate_number, planName: customer.rows[0].plan_name, wasExisting: true };
+    }
     const settings = await client.query("SELECT invoice_prefix,vat_rate FROM company_settings WHERE id=1");
     const vatRate = Number(settings.rows[0]?.vat_rate ?? 5);
     const prefix = String(settings.rows[0]?.invoice_prefix ?? "JMCW");
     const total = Number(customer.rows[0].price);
     const subtotal = Number((total / (1 + vatRate / 100)).toFixed(2));
     const vatAmount = Number((total - subtotal).toFixed(2));
-    const inserted = await client.query(`INSERT INTO invoices (invoice_number,customer_id,subtotal,vat_amount,total,issue_date,due_date) VALUES ($1,$2,$3,$4,$5,CURRENT_DATE,CURRENT_DATE+INTERVAL '7 days') RETURNING id`, [`TMP-${Date.now()}-${customerId}`, customerId, subtotal, vatAmount, total]);
+    const inserted = await client.query(`INSERT INTO invoices (invoice_number,customer_id,subtotal,vat_amount,total,issue_date,due_date,billing_month) VALUES ($1,$2,$3,$4,$5,CURRENT_DATE,CURRENT_DATE+INTERVAL '7 days',DATE_TRUNC('month',CURRENT_DATE)::DATE) ON CONFLICT (customer_id,billing_month) DO NOTHING RETURNING id`, [`TMP-${Date.now()}-${customerId}`, customerId, subtotal, vatAmount, total]);
+    if (!inserted.rowCount) {
+      const concurrent = await client.query(`SELECT id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate",sent_at AS "sentAt" FROM invoices WHERE customer_id=$1 AND billing_month=DATE_TRUNC('month',CURRENT_DATE)::DATE`, [customerId]);
+      await client.query("COMMIT");
+      return { ...concurrent.rows[0], customerName: customer.rows[0].name, phone: customer.rows[0].phone, plateNumber: customer.rows[0].plate_number, planName: customer.rows[0].plan_name, wasExisting: true };
+    }
     const id = Number(inserted.rows[0].id);
     const invoiceNumber = `${prefix}-${new Date().getFullYear()}-${String(id).padStart(6, "0")}`;
     const result = await client.query(`UPDATE invoices SET invoice_number=$1 WHERE id=$2 RETURNING id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate"`, [invoiceNumber, id]);
     await client.query("COMMIT");
-    return { ...result.rows[0], customerName: customer.rows[0].name, phone: customer.rows[0].phone, plateNumber: customer.rows[0].plate_number, planName: customer.rows[0].plan_name };
+    return { ...result.rows[0], customerName: customer.rows[0].name, phone: customer.rows[0].phone, plateNumber: customer.rows[0].plate_number, planName: customer.rows[0].plan_name, wasExisting: false };
   } catch (error) { await client.query("ROLLBACK"); throw error; }
   finally { client.release(); }
 }

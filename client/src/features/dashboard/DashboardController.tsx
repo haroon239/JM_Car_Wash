@@ -104,10 +104,17 @@ export function DashboardController() {
       if (!response.ok) throw new Error((await response.json()).message ?? "Unable to generate invoice");
       const row = await response.json();
       const invoice: Invoice = { ...row, id: Number(row.id), customerId: Number(row.customerId), total: Number(row.total) };
-      setInvoices((current) => [invoice, ...current]);
+      setInvoices((current) => current.some((item) => item.id === invoice.id) ? current.map((item) => item.id === invoice.id ? invoice : item) : [invoice, ...current]);
       setActiveInvoice(invoice);
       setActive(customer);
+      if (row.wasExisting) setNotice(`Existing invoice ${invoice.invoiceNumber} opened for this month.`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to generate invoice.", "error"); }
+  }
+
+  function hasCurrentMonthInvoice(customerId:number) {
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+    return invoices.some((invoice) => invoice.customerId === customerId && String(invoice.issueDate).slice(0,7) === month);
   }
 
   function openSavedInvoice(invoice: Invoice) {
