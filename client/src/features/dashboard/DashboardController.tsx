@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { PageHeader } from "../../components/layout/PageHeader";
-import { Notice } from "../../components/common/Notice";
+import { Notice, type NoticeKind } from "../../components/common/Notice";
 import { InvoicesPage } from "../../pages/InvoicesPage";
 import { PaymentsPage } from "../../pages/PaymentsPage";
 import { PlansPage } from "../../pages/PlansPage";
@@ -26,7 +26,7 @@ export function DashboardController() {
   const [editing, setEditing] = useState<Customer | null>(null);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [customerForm, setCustomerForm] = useState<CustomerForm>({ name: "", phone: "971", plate: "", plan: "Basic", planStartDate: new Date().toISOString().slice(0, 10) });
-  const [notice, setNotice] = useState("");
+  const [notice, setNoticeState] = useState<{message:string;kind:NoticeKind}>({message:"",kind:"success"});
   const [plans, setPlans] = useState<Plan[]>(Object.entries(planPrices).map(([name, price], index) => ({ id: index + 1, name, price, washesPerMonth: name === "Corporate" ? null : (index + 1) * 4 })));
   const [isSaving, setIsSaving] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
@@ -45,7 +45,7 @@ export function DashboardController() {
         const [customersResponse, plansResponse, invoicesResponse, paymentsResponse,settingsResponse] = await Promise.all([fetch("/api/customers?view=all"), fetch("/api/plans"), fetch("/api/invoices"), fetch("/api/payments"),fetch("/api/settings")]);
         if (!customersResponse.ok || !plansResponse.ok || !invoicesResponse.ok || !paymentsResponse.ok||!settingsResponse.ok) return;
         const [customerRows, planRows, invoiceRows, paymentRows,settingsRow] = await Promise.all([customersResponse.json(), plansResponse.json(), invoicesResponse.json(), paymentsResponse.json(),settingsResponse.json()]);
-        setSettings({...settingsRow,vatRate:Number(settingsRow.vatRate)});
+        setSettings({...settingsRow,trn:settingsRow.trn ?? "",vatRate:Number(settingsRow.vatRate)});
         const normalizedPlans: Plan[] = planRows.map((plan: { id: string | number; name: string; price: string | number; washesPerMonth: number | null }) => ({ id: Number(plan.id), name: plan.name, price: Number(plan.price), washesPerMonth: plan.washesPerMonth }));
         setPlans(normalizedPlans);
         setInvoices(invoiceRows.map((invoice: Record<string, string | number | null>) => ({ ...invoice, id: Number(invoice.id), customerId: Number(invoice.customerId), total: Number(invoice.total) })) as Invoice[]);
@@ -55,13 +55,21 @@ export function DashboardController() {
           plan: customer.plan ?? "No plan", planStartDate: customer.planStartDate?.slice(0, 10) ?? "", archivedAt: customer.archivedAt, amount: Number(customer.price ?? 0), due: "01 Aug 2026", status: "Pending" as const
         })));
       } catch {
-        setNotice("Database is temporarily unavailable; showing demo records.");
+        setNotice("Database is temporarily unavailable; showing demo records.", "error");
       }
     }
     void loadDatabaseData();
   }, []);
 
-  async function saveCompanySettings(){setIsSaving(true);try{const response=await fetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(settings)});if(!response.ok)throw new Error((await response.json()).message??"Unable to save settings");const saved=await response.json();setSettings({...saved,vatRate:Number(saved.vatRate)});setNotice("Company and invoice settings saved.");}catch(error){setNotice(error instanceof Error?error.message:"Unable to save settings.");}finally{setIsSaving(false);}}
+  function setNotice(message:string, kind:NoticeKind="success") { setNoticeState({message,kind}); }
+
+  useEffect(() => {
+    if (!notice.message || notice.kind === "error") return;
+    const timer = window.setTimeout(() => setNoticeState({message:"",kind:"success"}), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  async function saveCompanySettings(){setIsSaving(true);try{const response=await fetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({...settings,trn:settings.trn??""})});if(!response.ok)throw new Error((await response.json()).message??"Unable to save settings");const saved=await response.json();setSettings({...saved,trn:saved.trn??"",vatRate:Number(saved.vatRate)});setNotice("Company and invoice settings saved.");}catch(error){setNotice(error instanceof Error?error.message:"Unable to save settings.","error");}finally{setIsSaving(false);}}
 
   const activeCustomers = useMemo(() => customers.filter((customer) => !customer.archivedAt), [customers]);
   const filtered = useMemo(() => activeCustomers.filter((customer) =>
@@ -87,7 +95,7 @@ export function DashboardController() {
       setInvoices((current) => current.map((invoice) => invoice.id === activeInvoice.id ? { ...invoice, status: "sent", sentAt: new Date().toISOString() } : invoice));
       setActiveInvoice({ ...activeInvoice, status: "sent", sentAt: new Date().toISOString() });
       setNotice(`Invoice ${activeInvoice.invoiceNumber} marked as sent by Admin.`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to mark invoice as sent."); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to mark invoice as sent.", "error"); }
   }
 
   async function prepareInvoice(customer: Customer) {
@@ -99,12 +107,12 @@ export function DashboardController() {
       setInvoices((current) => [invoice, ...current]);
       setActiveInvoice(invoice);
       setActive(customer);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to generate invoice."); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to generate invoice.", "error"); }
   }
 
   function openSavedInvoice(invoice: Invoice) {
     const customer = customers.find((item) => item.id === invoice.customerId);
-    if (!customer) return setNotice("Customer record for this invoice is unavailable.");
+    if (!customer) return setNotice("Customer record for this invoice is unavailable.", "error");
     setActiveInvoice(invoice);
     setActive(customer);
   }
@@ -112,7 +120,7 @@ export function DashboardController() {
   async function recordPayment(invoice: Invoice) {
     const method = window.prompt("Payment method: cash, card, bank_transfer, or other", "cash");
     if (!method) return;
-    if (!["cash", "card", "bank_transfer", "other"].includes(method)) return setNotice("Invalid payment method.");
+    if (!["cash", "card", "bank_transfer", "other"].includes(method)) return setNotice("Invalid payment method.", "error");
     const reference = window.prompt("Payment reference (optional)", "") ?? "";
     try {
       const response = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceId: invoice.id, method, reference }) });
@@ -123,7 +131,7 @@ export function DashboardController() {
       setInvoices((current) => current.map((item) => item.id === invoice.id ? { ...item, status: "paid" } : item));
       if (activeInvoice?.id === invoice.id) setActiveInvoice({ ...activeInvoice, status: "paid" });
       setNotice(`${invoice.invoiceNumber} marked paid via ${method.replace("_", " ")}.`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to record payment."); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to record payment.", "error"); }
   }
 
   function openCustomerForm(customer?: Customer) {
@@ -137,7 +145,7 @@ export function DashboardController() {
   async function saveCustomer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const selectedPlan = plans.find((plan) => plan.name === customerForm.plan);
-    if (!selectedPlan) return setNotice("Please select a valid plan.");
+    if (!selectedPlan) return setNotice("Please select a valid plan.", "error");
     setIsSaving(true);
     try {
       const response = await fetch(editing ? `/api/customers/${editing.id}` : "/api/customers", {
@@ -152,7 +160,7 @@ export function DashboardController() {
       setNotice(`${customerForm.name} ${editing ? "updated" : "added"} successfully.`);
       setShowCustomerForm(false);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Unable to save customer.");
+      setNotice(error instanceof Error ? error.message : "Unable to save customer.", "error");
     } finally { setIsSaving(false); }
   }
 
@@ -164,7 +172,7 @@ export function DashboardController() {
       setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, archivedAt: new Date().toISOString() } : item));
       setShowCustomerForm(false);
       setNotice(`${customer.name} archived.`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to archive customer."); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to archive customer.", "error"); }
   }
 
   async function restoreCustomer(customer: Customer) {
@@ -173,7 +181,7 @@ export function DashboardController() {
       if (!response.ok) throw new Error("Unable to restore customer");
       setCustomers((current) => current.map((item) => item.id === customer.id ? { ...item, archivedAt: null } : item));
       setNotice(`${customer.name} restored to active customers.`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to restore customer."); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to restore customer.", "error"); }
   }
 
   function openPlanForm(plan?: Plan) {
@@ -197,7 +205,7 @@ export function DashboardController() {
       setEditingPlan(null);
       setPlanForm({ name: "", price: "", washesPerMonth: "" });
       setNotice(`${plan.name} plan ${editingPlan ? "updated" : "created"}.`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to save plan."); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to save plan.", "error"); }
     finally { setIsSaving(false); }
   }
 
@@ -209,7 +217,7 @@ export function DashboardController() {
       setPlans((current) => current.filter((item) => item.id !== plan.id));
       setEditingPlan(null);
       setNotice(`${plan.name} plan deactivated.`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to deactivate plan."); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to deactivate plan.", "error"); }
   }
 
   return (
@@ -218,7 +226,7 @@ export function DashboardController() {
 
       <section className={`content section-${section}`}>
         <PageHeader section={section} onAddCustomer={()=>openCustomerForm()} onAddPlan={()=>{setShowPlans(true);openPlanForm();}}/>
-        <Notice message={notice} onClose={()=>setNotice("")}/>
+        <Notice message={notice.message} kind={notice.kind} onClose={()=>setNoticeState({message:"",kind:"success"})}/>
 
         {section === "customers" && <section className="panel section-panel"><div className="panel-head"><div><h2>Customer directory</h2><p>{activeCustomers.length} active · {customers.length - activeCustomers.length} archived</p></div><div className="view-tabs"><button className={customerView === "active" ? "active" : ""} onClick={() => setCustomerView("active")}>Active</button><button className={customerView === "archived" ? "active" : ""} onClick={() => setCustomerView("archived")}>Archived</button><button className={customerView === "all" ? "active" : ""} onClick={() => setCustomerView("all")}>All</button></div></div><div className="toolbar"><label>⌕<input aria-label="Search customers" placeholder="Search customer, phone or plate" value={query} onChange={(event) => setQuery(event.target.value)} /></label></div><div className="table-wrap"><table><thead><tr><th>Customer</th><th>WhatsApp</th><th>Plan</th><th>Plan started</th><th>Status</th><th>Actions</th></tr></thead><tbody>{customerFiltered.map((customer) => <tr key={customer.id}><td><div className="customer-cell"><span>{customer.name.split(" ").map((part) => part[0]).slice(0,2).join("")}</span><div><strong>{customer.name}</strong><small>{customer.plate}</small></div></div></td><td>{customer.phone}</td><td>{customer.plan}<small>AED {customer.amount.toFixed(2)}/month</small></td><td>{customer.planStartDate ? new Date(`${customer.planStartDate}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td><td>{customer.archivedAt ? <i className="status archived">Archived</i> : <i className="status paid">Active</i>}</td><td><div className="row-actions">{customer.archivedAt ? <button className="restore-button" onClick={() => void restoreCustomer(customer)}>Restore</button> : <><button className="edit-button" onClick={() => openCustomerForm(customer)}>Edit</button><button className="send-button" onClick={() => void prepareInvoice(customer)}>Invoice</button></>}</div></td></tr>)}</tbody></table>{customerFiltered.length === 0 && <div className="empty-state">No {customerView} customers found.</div>}</div></section>}
 
