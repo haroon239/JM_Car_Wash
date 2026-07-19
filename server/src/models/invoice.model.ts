@@ -1,5 +1,8 @@
 import { requireDatabase } from "../config/database.js";
 
+const uaeToday = "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dubai')::DATE";
+const uaeBillingMonth = "DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dubai')::DATE";
+
 export async function findInvoices() {
   return (
     await requireDatabase().query(`
@@ -23,7 +26,7 @@ export async function createInvoice(customerId: number) {
     if (!customer.rowCount)
       throw Object.assign(new Error("Active customer not found"), { status: 404 });
     const existing = await client.query(
-      `SELECT id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate",sent_at AS "sentAt" FROM invoices WHERE customer_id=$1 AND billing_month=DATE_TRUNC('month',CURRENT_DATE)::DATE`,
+      `SELECT id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate",sent_at AS "sentAt" FROM invoices WHERE customer_id=$1 AND billing_month=${uaeBillingMonth}`,
       [customerId],
     );
     if (existing.rowCount) {
@@ -46,12 +49,12 @@ export async function createInvoice(customerId: number) {
     const subtotal = Number((total / (1 + vatRate / 100)).toFixed(2));
     const vatAmount = Number((total - subtotal).toFixed(2));
     const inserted = await client.query(
-      `INSERT INTO invoices (invoice_number,customer_id,subtotal,vat_amount,total,issue_date,due_date,billing_month) VALUES ($1,$2,$3,$4,$5,CURRENT_DATE,CURRENT_DATE+INTERVAL '7 days',DATE_TRUNC('month',CURRENT_DATE)::DATE) ON CONFLICT (customer_id,billing_month) DO NOTHING RETURNING id`,
+      `INSERT INTO invoices (invoice_number,customer_id,subtotal,vat_amount,total,issue_date,due_date,billing_month) VALUES ($1,$2,$3,$4,$5,${uaeToday},${uaeToday}+7,${uaeBillingMonth}) ON CONFLICT (customer_id,billing_month) DO NOTHING RETURNING id,issue_date`,
       [`TMP-${Date.now()}-${customerId}`, customerId, subtotal, vatAmount, total],
     );
     if (!inserted.rowCount) {
       const concurrent = await client.query(
-        `SELECT id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate",sent_at AS "sentAt" FROM invoices WHERE customer_id=$1 AND billing_month=DATE_TRUNC('month',CURRENT_DATE)::DATE`,
+        `SELECT id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate",sent_at AS "sentAt" FROM invoices WHERE customer_id=$1 AND billing_month=${uaeBillingMonth}`,
         [customerId],
       );
       await client.query("COMMIT");
@@ -65,7 +68,8 @@ export async function createInvoice(customerId: number) {
       };
     }
     const id = Number(inserted.rows[0].id);
-    const invoiceNumber = `${prefix}-${new Date().getFullYear()}-${String(id).padStart(6, "0")}`;
+    const invoiceYear = new Date(inserted.rows[0].issue_date).getUTCFullYear();
+    const invoiceNumber = `${prefix}-${invoiceYear}-${String(id).padStart(6, "0")}`;
     const result = await client.query(
       `UPDATE invoices SET invoice_number=$1 WHERE id=$2 RETURNING id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate"`,
       [invoiceNumber, id],
@@ -85,6 +89,36 @@ export async function createInvoice(customerId: number) {
   } finally {
     client.release();
   }
+}
+
+export async function findCustomersMissingCurrentInvoice() {
+  return (
+    await requireDatabase().query(`
+      SELECT c.id
+      FROM customers c
+      JOIN plans p ON p.id = c.plan_id AND p.is_active = TRUE
+      WHERE c.deleted_at IS NULL
+        AND c.status = 'active'
+        AND c.plan_start_date IS NOT NULL
+        AND c.plan_start_date <= ${uaeToday}
+        AND NOT EXISTS (
+          SELECT 1 FROM invoices i
+          WHERE i.customer_id = c.id AND i.billing_month = ${uaeBillingMonth}
+        )
+      ORDER BY c.id
+    `)
+  ).rows as Array<{ id: string | number }>;
+}
+
+export async function markPastDueInvoicesOverdue() {
+  return (
+    await requireDatabase().query(`
+      UPDATE invoices
+      SET status = 'overdue'
+      WHERE status IN ('pending', 'sent') AND due_date < ${uaeToday}
+      RETURNING id
+    `)
+  ).rowCount;
 }
 
 export async function updateInvoiceStatus(id: number, status: string) {
