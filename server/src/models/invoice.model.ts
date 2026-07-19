@@ -100,7 +100,18 @@ export async function findCustomersMissingCurrentInvoice() {
       WHERE c.deleted_at IS NULL
         AND c.status = 'active'
         AND c.plan_start_date IS NOT NULL
-        AND c.plan_start_date <= ${uaeToday}
+        -- The first recurring invoice is due only after one complete plan month.
+        AND c.plan_start_date < DATE_TRUNC('month', ${uaeToday})::DATE
+        AND ${uaeToday} >= MAKE_DATE(
+          EXTRACT(YEAR FROM ${uaeToday})::INTEGER,
+          EXTRACT(MONTH FROM ${uaeToday})::INTEGER,
+          LEAST(
+            EXTRACT(DAY FROM c.plan_start_date)::INTEGER,
+            EXTRACT(
+              DAY FROM (DATE_TRUNC('month', ${uaeToday}) + INTERVAL '1 month - 1 day')
+            )::INTEGER
+          )
+        )
         AND NOT EXISTS (
           SELECT 1 FROM invoices i
           WHERE i.customer_id = c.id AND i.billing_month = ${uaeBillingMonth}
