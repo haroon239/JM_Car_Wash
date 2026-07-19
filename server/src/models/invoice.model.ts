@@ -15,7 +15,12 @@ export async function findInvoices() {
   ).rows;
 }
 
-export async function createInvoice(customerId: number) {
+type InvoiceGenerationOptions = {
+  issueDate?: string;
+  source?: "manual" | "automatic";
+};
+
+export async function createInvoice(customerId: number, options: InvoiceGenerationOptions = {}) {
   const client = await requireDatabase().connect();
   try {
     await client.query("BEGIN");
@@ -49,8 +54,24 @@ export async function createInvoice(customerId: number) {
     const subtotal = Number((total / (1 + vatRate / 100)).toFixed(2));
     const vatAmount = Number((total - subtotal).toFixed(2));
     const inserted = await client.query(
-      `INSERT INTO invoices (invoice_number,customer_id,subtotal,vat_amount,total,issue_date,due_date,billing_month) VALUES ($1,$2,$3,$4,$5,${uaeToday},${uaeToday}+7,${uaeBillingMonth}) ON CONFLICT (customer_id,billing_month) DO NOTHING RETURNING id,issue_date`,
-      [`TMP-${Date.now()}-${customerId}`, customerId, subtotal, vatAmount, total],
+      `INSERT INTO invoices (
+        invoice_number,customer_id,subtotal,vat_amount,total,issue_date,due_date,
+        billing_month,generation_source
+      ) VALUES (
+        $1,$2,$3,$4,$5,
+        COALESCE($6::DATE,${uaeToday}),
+        COALESCE($6::DATE,${uaeToday})+7,
+        ${uaeBillingMonth},$7
+      ) ON CONFLICT (customer_id,billing_month) DO NOTHING RETURNING id,issue_date`,
+      [
+        `TMP-${Date.now()}-${customerId}`,
+        customerId,
+        subtotal,
+        vatAmount,
+        total,
+        options.issueDate ?? null,
+        options.source ?? "manual",
+      ],
     );
     if (!inserted.rowCount) {
       const concurrent = await client.query(
@@ -94,7 +115,16 @@ export async function createInvoice(customerId: number) {
 export async function findCustomersMissingCurrentInvoice() {
   return (
     await requireDatabase().query(`
-      SELECT c.id
+      SELECT c.id, MAKE_DATE(
+        EXTRACT(YEAR FROM ${uaeToday})::INTEGER,
+        EXTRACT(MONTH FROM ${uaeToday})::INTEGER,
+        LEAST(
+          EXTRACT(DAY FROM c.plan_start_date)::INTEGER,
+          EXTRACT(
+            DAY FROM (DATE_TRUNC('month', ${uaeToday}) + INTERVAL '1 month - 1 day')
+          )::INTEGER
+        )
+      ) AS "invoiceDate"
       FROM customers c
       JOIN plans p ON p.id = c.plan_id AND p.is_active = TRUE
       WHERE c.deleted_at IS NULL
@@ -118,7 +148,7 @@ export async function findCustomersMissingCurrentInvoice() {
         )
       ORDER BY c.id
     `)
-  ).rows as Array<{ id: string | number }>;
+  ).rows as Array<{ id: string | number; invoiceDate: string }>;
 }
 
 export async function markPastDueInvoicesOverdue() {

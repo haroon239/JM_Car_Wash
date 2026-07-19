@@ -13,7 +13,10 @@ export async function runBillingMaintenance() {
 
   let generatedCount = 0;
   for (const customer of customers) {
-    const invoice = await createInvoice(Number(customer.id));
+    const invoice = await createInvoice(Number(customer.id), {
+      issueDate: customer.invoiceDate,
+      source: "automatic",
+    });
     if (!invoice.wasExisting) generatedCount += 1;
   }
 
