@@ -283,6 +283,24 @@ export function DashboardController() {
     setNotice(`WhatsApp opened for ${customer.name}. Review the message and press Send.`);
   }
 
+  function printInvoice(customer: Customer) {
+    const originalTitle = document.title;
+    const cleanFilePart = (value: string) => value.replace(/[\\/:*?"<>|]+/g, "-").trim();
+    document.title = [
+      cleanFilePart(customer.name),
+      cleanFilePart(settings.companyName),
+      cleanFilePart(activeInvoice?.invoiceNumber ?? "Invoice"),
+    ].join(" - ");
+
+    const restoreTitle = () => {
+      document.title = originalTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+
+    window.addEventListener("afterprint", restoreTitle);
+    window.print();
+  }
+
   async function markSent(customer: Customer) {
     if (!activeInvoice) return;
     try {
@@ -1227,7 +1245,7 @@ export function DashboardController() {
               </p>
             </div>
             <div className="modal-actions">
-              <button className="secondary" onClick={() => window.print()}>
+              <button className="secondary" onClick={() => printInvoice(active)}>
                 ↓ Download / Print PDF
               </button>
               <button className="whatsapp" onClick={() => openWhatsApp(active)}>
