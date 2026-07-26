@@ -47,6 +47,7 @@ export function CustomersPage(p: Props) {
               <th>WhatsApp</th>
               <th>Plan</th>
               <th>Plan started</th>
+              <th>Plan expiry</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -82,6 +83,22 @@ export function CustomersPage(p: Props) {
                         year: "numeric",
                       })
                     : "—"}
+                </td>
+                <td>
+                  {c.nextInvoiceDate
+                    ? new Date(`${c.nextInvoiceDate}T00:00:00`).toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })
+                    : "No automatic expiry"}
+                  <small>
+                    {c.billingType === "one_time"
+                      ? "One-time service"
+                      : c.autoInvoice
+                        ? "Renews automatically"
+                        : "Auto-renewal off"}
+                  </small>
                 </td>
                 <td>
                   {c.archivedAt ? (

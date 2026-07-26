@@ -871,6 +871,7 @@ export function DashboardController() {
                     <th>WhatsApp</th>
                     <th>Plan</th>
                     <th>Plan started</th>
+                    <th>Plan expiry</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
@@ -908,6 +909,25 @@ export function DashboardController() {
                               { day: "2-digit", month: "short", year: "numeric" },
                             )
                           : "—"}
+                      </td>
+                      <td>
+                        {customer.nextInvoiceDate
+                          ? new Date(`${customer.nextInvoiceDate}T00:00:00`).toLocaleDateString(
+                              "en-GB",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              },
+                            )
+                          : "No automatic expiry"}
+                        <small>
+                          {customer.billingType === "one_time"
+                            ? "One-time service"
+                            : customer.autoInvoice
+                              ? "Renews automatically"
+                              : "Auto-renewal off"}
+                        </small>
                       </td>
                       <td>
                         {customer.archivedAt ? (
@@ -1288,7 +1308,7 @@ export function DashboardController() {
               {customerForm.billingType !== "manual" && (
                 <>
                   <label>
-                    <span>Next invoice date</span>
+                    <span>Plan expiry / next renewal date</span>
                     <input
                       required
                       type="date"
