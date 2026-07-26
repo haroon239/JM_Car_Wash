@@ -135,7 +135,7 @@ export function DashboardController() {
     trn: "",
     address: "United Arab Emirates",
     invoicePrefix: "JMCW",
-    vatRate: 5,
+    vatRate: 0,
   });
 
   useEffect(() => {
@@ -172,7 +172,7 @@ export function DashboardController() {
         setSettings({
           ...settingsRow,
           trn: settingsRow.trn ?? "",
-          vatRate: Number(settingsRow.vatRate),
+          vatRate: 0,
         });
         const normalizedPlans: Plan[] = planRows.map(
           (plan: {
@@ -254,12 +254,12 @@ export function DashboardController() {
       const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...settings, trn: settings.trn ?? "" }),
+        body: JSON.stringify({ ...settings, trn: settings.trn ?? "", vatRate: 0 }),
       });
       if (!response.ok)
         throw new Error((await response.json()).message ?? "Unable to save settings");
       const saved = await response.json();
-      setSettings({ ...saved, trn: saved.trn ?? "", vatRate: Number(saved.vatRate) });
+      setSettings({ ...saved, trn: saved.trn ?? "", vatRate: 0 });
       setNotice("Company and invoice settings saved.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Unable to save settings.", "error");
@@ -1259,7 +1259,7 @@ export function DashboardController() {
                     {settings.trn ? ` · TRN ${settings.trn}` : ""}
                   </small>
                 </div>
-                <h3>TAX INVOICE</h3>
+                <h3>INVOICE</h3>
               </div>
               <div className="invoice-meta">
                 <div>
@@ -1299,7 +1299,6 @@ export function DashboardController() {
                   <tr>
                     <th>Description</th>
                     <th>Qty</th>
-                    <th>VAT</th>
                     <th>Amount</th>
                   </tr>
                 </thead>
@@ -1310,22 +1309,11 @@ export function DashboardController() {
                       <small>Monthly subscription</small>
                     </td>
                     <td>1</td>
-                    <td>{settings.vatRate}%</td>
-                    <td>AED {(active.amount / (1 + settings.vatRate / 100)).toFixed(2)}</td>
+                    <td>AED {active.amount.toFixed(2)}</td>
                   </tr>
                 </tbody>
               </table>
               <div className="totals">
-                <p>
-                  <span>Subtotal</span>
-                  <b>AED {(active.amount / (1 + settings.vatRate / 100)).toFixed(2)}</b>
-                </p>
-                <p>
-                  <span>VAT {settings.vatRate}%</span>
-                  <b>
-                    AED {(active.amount - active.amount / (1 + settings.vatRate / 100)).toFixed(2)}
-                  </b>
-                </p>
                 <p className="total">
                   <span>Total due</span>
                   <b>AED {active.amount.toFixed(2)}</b>

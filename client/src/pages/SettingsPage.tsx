@@ -6,14 +6,14 @@ type Props = {
   onSave: () => void;
 };
 export function SettingsPage({ settings, isSaving, onChange, onSave }: Props) {
-  const field = (key: keyof CompanySettings, value: string) =>
-    onChange({ ...settings, [key]: key === "vatRate" ? Number(value) : value });
+  const field = (key: Exclude<keyof CompanySettings, "vatRate">, value: string) =>
+    onChange({ ...settings, [key]: value });
   return (
     <section className="panel section-panel settings-card">
       <div className="panel-head">
         <div>
-          <h2>Company & tax information</h2>
-          <p>This information appears on every generated tax invoice.</p>
+          <h2>Company information</h2>
+          <p>This information appears on every generated invoice.</p>
         </div>
       </div>
       <form
@@ -52,18 +52,6 @@ export function SettingsPage({ settings, isSaving, onChange, onSave }: Props) {
             required
             value={settings.invoicePrefix}
             onChange={(e) => field("invoicePrefix", e.target.value.toUpperCase())}
-          />
-        </label>
-        <label>
-          <span>VAT rate (%)</span>
-          <input
-            required
-            type="number"
-            min="0"
-            max="100"
-            step="0.01"
-            value={settings.vatRate}
-            onChange={(e) => field("vatRate", e.target.value)}
           />
         </label>
         <button type="submit" className="primary" disabled={isSaving}>

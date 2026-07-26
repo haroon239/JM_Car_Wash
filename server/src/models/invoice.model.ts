@@ -45,14 +45,11 @@ export async function createInvoice(customerId: number, options: InvoiceGenerati
         wasExisting: true,
       };
     }
-    const settings = await client.query(
-      "SELECT invoice_prefix,vat_rate FROM company_settings WHERE id=1",
-    );
-    const vatRate = Number(settings.rows[0]?.vat_rate ?? 5);
+    const settings = await client.query("SELECT invoice_prefix FROM company_settings WHERE id=1");
     const prefix = String(settings.rows[0]?.invoice_prefix ?? "JMCW");
     const total = Number(customer.rows[0].price);
-    const subtotal = Number((total / (1 + vatRate / 100)).toFixed(2));
-    const vatAmount = Number((total - subtotal).toFixed(2));
+    const subtotal = total;
+    const vatAmount = 0;
     const inserted = await client.query(
       `INSERT INTO invoices (
         invoice_number,customer_id,subtotal,vat_amount,total,issue_date,due_date,
