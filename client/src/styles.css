@@ -872,10 +872,11 @@ td small {
 }
 .customer-modal {
   width: min(560px, 100%);
+  max-height: calc(100vh - 32px);
   background: #f6f9f9;
   border-radius: 15px;
   box-shadow: 0 20px 70px #09232d66;
-  overflow: hidden;
+  overflow: auto;
 }
 .customer-form {
   padding: 22px 25px;
@@ -916,6 +917,16 @@ td small {
 .customer-form label small {
   font-size: 9px;
   color: var(--muted);
+}
+.customer-form .checkbox-label {
+  grid-column: span 2;
+  flex-direction: row;
+  align-items: center;
+}
+.customer-form .checkbox-label input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
 }
 .form-actions {
   grid-column: span 2;

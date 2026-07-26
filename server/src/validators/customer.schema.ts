@@ -10,6 +10,10 @@ export const customerSchema = z.object({
   plateNumber: z.string().trim().min(2).max(40),
   planId: z.coerce.number().int().positive(),
   planStartDate: z.iso.date(),
+  agreedPrice: z.coerce.number().nonnegative().max(9999999),
+  billingType: z.enum(["monthly", "weekly", "one_time", "manual"]),
+  autoInvoice: z.boolean(),
+  nextInvoiceDate: z.iso.date().nullable(),
 });
 
 export const idSchema = z.coerce.number().int().positive();

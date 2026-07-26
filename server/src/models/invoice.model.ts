@@ -1,22 +1,28 @@
 import { requireDatabase } from "../config/database.js";
 
 const uaeToday = "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dubai')::DATE";
-const uaeBillingMonth = "DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dubai')::DATE";
+
+const invoiceFields = `i.id,i.invoice_number AS "invoiceNumber",
+  i.customer_id AS "customerId",i.subtotal,i.vat_amount AS "vatAmount",i.total,
+  i.status,i.issue_date AS "issueDate",i.due_date AS "dueDate",i.sent_at AS "sentAt",
+  i.description,i.revision_number AS "revisionNumber"`;
 
 export async function findInvoices() {
   return (
     await requireDatabase().query(`
-    SELECT i.id,i.invoice_number AS "invoiceNumber",i.customer_id AS "customerId",i.subtotal,
-      i.vat_amount AS "vatAmount",i.total,i.status,i.issue_date AS "issueDate",i.due_date AS "dueDate",
-      i.sent_at AS "sentAt",c.name AS "customerName",c.phone,c.plate_number AS "plateNumber",p.name AS "planName"
-    FROM invoices i JOIN customers c ON c.id=i.customer_id LEFT JOIN plans p ON p.id=c.plan_id
-    ORDER BY i.issue_date DESC,i.id DESC
-  `)
+      SELECT ${invoiceFields},c.name AS "customerName",c.phone,
+        c.plate_number AS "plateNumber",p.name AS "planName"
+      FROM invoices i
+      JOIN customers c ON c.id=i.customer_id
+      LEFT JOIN plans p ON p.id=c.plan_id
+      ORDER BY i.issue_date DESC,i.id DESC
+    `)
   ).rows;
 }
 
 type InvoiceGenerationOptions = {
   issueDate?: string;
+  billingPeriod?: string;
   source?: "manual" | "automatic";
 };
 
@@ -25,82 +31,80 @@ export async function createInvoice(customerId: number, options: InvoiceGenerati
   try {
     await client.query("BEGIN");
     const customer = await client.query(
-      `SELECT c.id,c.name,c.phone,c.plate_number,p.name AS plan_name,p.price FROM customers c JOIN plans p ON p.id=c.plan_id WHERE c.id=$1 AND c.deleted_at IS NULL`,
+      `SELECT c.id,c.name,c.phone,c.plate_number,c.agreed_price,
+        p.name AS plan_name
+       FROM customers c
+       JOIN plans p ON p.id=c.plan_id
+       WHERE c.id=$1 AND c.deleted_at IS NULL`,
       [customerId],
     );
     if (!customer.rowCount)
       throw Object.assign(new Error("Active customer not found"), { status: 404 });
+
+    const billingPeriod = options.billingPeriod ?? options.issueDate ?? null;
     const existing = await client.query(
-      `SELECT id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate",sent_at AS "sentAt" FROM invoices WHERE customer_id=$1 AND billing_month=${uaeBillingMonth}`,
-      [customerId],
+      `SELECT ${invoiceFields}
+       FROM invoices i
+       WHERE i.customer_id=$1
+         AND i.billing_period=COALESCE($2::DATE,${uaeToday})`,
+      [customerId, billingPeriod],
     );
     if (existing.rowCount) {
       await client.query("COMMIT");
-      return {
-        ...existing.rows[0],
-        customerName: customer.rows[0].name,
-        phone: customer.rows[0].phone,
-        plateNumber: customer.rows[0].plate_number,
-        planName: customer.rows[0].plan_name,
-        wasExisting: true,
-      };
+      return invoiceWithCustomer(existing.rows[0], customer.rows[0], true);
     }
+
     const settings = await client.query("SELECT invoice_prefix FROM company_settings WHERE id=1");
     const prefix = String(settings.rows[0]?.invoice_prefix ?? "JMCW");
-    const total = Number(customer.rows[0].price);
-    const subtotal = total;
-    const vatAmount = 0;
+    const total = Number(customer.rows[0].agreed_price);
+    const description = `${customer.rows[0].plan_name} Car Wash Plan`;
     const inserted = await client.query(
       `INSERT INTO invoices (
         invoice_number,customer_id,subtotal,vat_amount,total,issue_date,due_date,
-        billing_month,generation_source
+        billing_month,billing_period,generation_source,description
       ) VALUES (
-        $1,$2,$3,$4,$5,
-        COALESCE($6::DATE,${uaeToday}),
-        COALESCE($6::DATE,${uaeToday})+7,
-        ${uaeBillingMonth},$7
-      ) ON CONFLICT (customer_id,billing_month) DO NOTHING RETURNING id,issue_date`,
+        $1,$2,$3,0,$3,
+        COALESCE($4::DATE,${uaeToday}),
+        COALESCE($4::DATE,${uaeToday})+7,
+        DATE_TRUNC('month',COALESCE($5::DATE,$4::DATE,${uaeToday}))::DATE,
+        COALESCE($5::DATE,$4::DATE,${uaeToday}),$6,$7
+      )
+      ON CONFLICT (customer_id,billing_period) DO NOTHING
+      RETURNING id,issue_date`,
       [
         `TMP-${Date.now()}-${customerId}`,
         customerId,
-        subtotal,
-        vatAmount,
         total,
         options.issueDate ?? null,
+        billingPeriod,
         options.source ?? "manual",
+        description,
       ],
     );
     if (!inserted.rowCount) {
       const concurrent = await client.query(
-        `SELECT id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate",sent_at AS "sentAt" FROM invoices WHERE customer_id=$1 AND billing_month=${uaeBillingMonth}`,
-        [customerId],
+        `SELECT ${invoiceFields} FROM invoices i
+         WHERE i.customer_id=$1
+           AND i.billing_period=COALESCE($2::DATE,${uaeToday})`,
+        [customerId, billingPeriod],
       );
       await client.query("COMMIT");
-      return {
-        ...concurrent.rows[0],
-        customerName: customer.rows[0].name,
-        phone: customer.rows[0].phone,
-        plateNumber: customer.rows[0].plate_number,
-        planName: customer.rows[0].plan_name,
-        wasExisting: true,
-      };
+      return invoiceWithCustomer(concurrent.rows[0], customer.rows[0], true);
     }
+
     const id = Number(inserted.rows[0].id);
     const invoiceYear = new Date(inserted.rows[0].issue_date).getUTCFullYear();
     const invoiceNumber = `${prefix}-${invoiceYear}-${String(id).padStart(6, "0")}`;
     const result = await client.query(
-      `UPDATE invoices SET invoice_number=$1 WHERE id=$2 RETURNING id,invoice_number AS "invoiceNumber",customer_id AS "customerId",subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",due_date AS "dueDate"`,
+      `UPDATE invoices SET invoice_number=$1 WHERE id=$2
+       RETURNING id,invoice_number AS "invoiceNumber",customer_id AS "customerId",
+         subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",
+         due_date AS "dueDate",sent_at AS "sentAt",description,
+         revision_number AS "revisionNumber"`,
       [invoiceNumber, id],
     );
     await client.query("COMMIT");
-    return {
-      ...result.rows[0],
-      customerName: customer.rows[0].name,
-      phone: customer.rows[0].phone,
-      plateNumber: customer.rows[0].plate_number,
-      planName: customer.rows[0].plan_name,
-      wasExisting: false,
-    };
+    return invoiceWithCustomer(result.rows[0], customer.rows[0], false);
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -109,51 +113,78 @@ export async function createInvoice(customerId: number, options: InvoiceGenerati
   }
 }
 
-export async function findCustomersMissingCurrentInvoice() {
+function invoiceWithCustomer(
+  invoice: Record<string, unknown>,
+  customer: Record<string, unknown>,
+  wasExisting: boolean,
+) {
+  return {
+    ...invoice,
+    customerName: customer.name,
+    phone: customer.phone,
+    plateNumber: customer.plate_number,
+    planName: customer.plan_name,
+    wasExisting,
+  };
+}
+
+export async function findCustomersDueForInvoice() {
   return (
     await requireDatabase().query(`
-      SELECT c.id, MAKE_DATE(
-        EXTRACT(YEAR FROM ${uaeToday})::INTEGER,
-        EXTRACT(MONTH FROM ${uaeToday})::INTEGER,
-        LEAST(
-          EXTRACT(DAY FROM c.plan_start_date)::INTEGER,
-          EXTRACT(
-            DAY FROM (DATE_TRUNC('month', ${uaeToday}) + INTERVAL '1 month - 1 day')
-          )::INTEGER
-        )
-      ) AS "invoiceDate"
+      SELECT c.id,c.next_invoice_date AS "invoiceDate",c.billing_type AS "billingType"
       FROM customers c
-      JOIN plans p ON p.id = c.plan_id AND p.is_active = TRUE
+      JOIN plans p ON p.id=c.plan_id AND p.is_active=TRUE
       WHERE c.deleted_at IS NULL
-        AND c.status = 'active'
-        AND c.plan_start_date IS NOT NULL
-        -- The first recurring invoice is due only after one complete plan month.
-        AND c.plan_start_date < DATE_TRUNC('month', ${uaeToday})::DATE
-        AND ${uaeToday} >= MAKE_DATE(
-          EXTRACT(YEAR FROM ${uaeToday})::INTEGER,
-          EXTRACT(MONTH FROM ${uaeToday})::INTEGER,
+        AND c.status='active'
+        AND c.auto_invoice=TRUE
+        AND c.billing_type IN ('monthly','weekly','one_time')
+        AND c.next_invoice_date IS NOT NULL
+        AND c.next_invoice_date <= ${uaeToday}
+      ORDER BY c.next_invoice_date,c.id
+    `)
+  ).rows as Array<{
+    id: string | number;
+    invoiceDate: string;
+    billingType: "monthly" | "weekly" | "one_time";
+  }>;
+}
+
+export async function advanceCustomerBilling(
+  customerId: number,
+  billingType: "monthly" | "weekly" | "one_time",
+) {
+  const expression =
+    billingType === "monthly"
+      ? `MAKE_DATE(
+          EXTRACT(YEAR FROM next_invoice_date + INTERVAL '1 month')::INTEGER,
+          EXTRACT(MONTH FROM next_invoice_date + INTERVAL '1 month')::INTEGER,
           LEAST(
-            EXTRACT(DAY FROM c.plan_start_date)::INTEGER,
+            EXTRACT(DAY FROM plan_start_date)::INTEGER,
             EXTRACT(
-              DAY FROM (DATE_TRUNC('month', ${uaeToday}) + INTERVAL '1 month - 1 day')
+              DAY FROM (
+                DATE_TRUNC('month',next_invoice_date) + INTERVAL '2 month - 1 day'
+              )
             )::INTEGER
           )
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM invoices i
-          WHERE i.customer_id = c.id AND i.billing_month = ${uaeBillingMonth}
-        )
-      ORDER BY c.id
-    `)
-  ).rows as Array<{ id: string | number; invoiceDate: string }>;
+        )`
+      : billingType === "weekly"
+        ? "next_invoice_date + INTERVAL '7 days'"
+        : "NULL";
+  await requireDatabase().query(
+    `UPDATE customers
+     SET next_invoice_date=${expression},
+       auto_invoice=CASE WHEN $2::VARCHAR='one_time' THEN FALSE ELSE auto_invoice END,
+       updated_at=NOW()
+     WHERE id=$1`,
+    [customerId, billingType],
+  );
 }
 
 export async function markPastDueInvoicesOverdue() {
   return (
     await requireDatabase().query(`
-      UPDATE invoices
-      SET status = 'overdue'
-      WHERE status IN ('pending', 'sent') AND due_date < ${uaeToday}
+      UPDATE invoices SET status='overdue'
+      WHERE status IN ('pending','sent') AND due_date < ${uaeToday}
       RETURNING id
     `)
   ).rowCount;
@@ -174,4 +205,84 @@ export async function updateInvoiceStatus(id: number, status: string) {
       [status, id],
     )
   ).rows[0];
+}
+
+export type InvoiceEditInput = {
+  description: string;
+  total: number;
+  issueDate: string;
+  dueDate: string;
+  reason: string;
+  applyToFuture: boolean;
+};
+
+export async function editInvoice(id: number, input: InvoiceEditInput) {
+  const client = await requireDatabase().connect();
+  try {
+    await client.query("BEGIN");
+    const current = await client.query("SELECT * FROM invoices WHERE id=$1 FOR UPDATE", [id]);
+    if (!current.rowCount) throw Object.assign(new Error("Invoice not found"), { status: 404 });
+    if (current.rows[0].status === "paid")
+      throw Object.assign(new Error("Paid invoices cannot be edited"), { status: 409 });
+
+    const revisionNumber = Number(current.rows[0].revision_number) + 1;
+    await client.query(
+      `INSERT INTO invoice_revisions (
+        invoice_id,revision_number,old_description,new_description,old_total,new_total,
+        old_issue_date,new_issue_date,old_due_date,new_due_date,reason
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        id,
+        revisionNumber,
+        current.rows[0].description,
+        input.description,
+        current.rows[0].total,
+        input.total,
+        current.rows[0].issue_date,
+        input.issueDate,
+        current.rows[0].due_date,
+        input.dueDate,
+        input.reason,
+      ],
+    );
+    const updated = await client.query(
+      `UPDATE invoices
+       SET description=$1,subtotal=$2,total=$2,vat_amount=0,vat_rate=0,
+         issue_date=$3,due_date=$4,revision_number=$5,
+         status=CASE WHEN $4::DATE < ${uaeToday} THEN 'overdue' ELSE 'pending' END,
+         sent_at=NULL
+       WHERE id=$6
+       RETURNING id,description,total,subtotal,status,issue_date AS "issueDate",
+         due_date AS "dueDate",revision_number AS "revisionNumber",sent_at AS "sentAt"`,
+      [input.description, input.total, input.issueDate, input.dueDate, revisionNumber, id],
+    );
+    if (input.applyToFuture) {
+      await client.query(
+        `UPDATE customers SET agreed_price=$1,updated_at=NOW()
+         WHERE id=$2`,
+        [input.total, current.rows[0].customer_id],
+      );
+    }
+    await client.query("COMMIT");
+    return updated.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function findInvoiceRevisions(id: number) {
+  return (
+    await requireDatabase().query(
+      `SELECT revision_number AS "revisionNumber",old_description AS "oldDescription",
+        new_description AS "newDescription",old_total AS "oldTotal",new_total AS "newTotal",
+        old_issue_date AS "oldIssueDate",new_issue_date AS "newIssueDate",
+        old_due_date AS "oldDueDate",new_due_date AS "newDueDate",reason,
+        changed_by AS "changedBy",changed_at AS "changedAt"
+       FROM invoice_revisions WHERE invoice_id=$1 ORDER BY revision_number DESC`,
+      [id],
+    )
+  ).rows;
 }

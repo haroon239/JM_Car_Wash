@@ -48,6 +48,20 @@ function formatDueDate(date?: string | null) {
   }).format(new Date(date));
 }
 
+function calculateNextInvoiceDate(startDate: string, billingType: Customer["billingType"]) {
+  if (!startDate || billingType === "manual") return "";
+  const date = new Date(`${startDate}T00:00:00`);
+  if (billingType === "monthly") {
+    const preferredDay = date.getDate();
+    date.setDate(1);
+    date.setMonth(date.getMonth() + 1);
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    date.setDate(Math.min(preferredDay, lastDay));
+  }
+  if (billingType === "weekly") date.setDate(date.getDate() + 7);
+  return date.toISOString().slice(0, 10);
+}
+
 const initialCustomers: Customer[] = [
   {
     id: 1048,
@@ -56,6 +70,9 @@ const initialCustomers: Customer[] = [
     plate: "Dubai A 45218",
     plan: "Premium",
     planStartDate: "2026-07-01",
+    billingType: "monthly",
+    autoInvoice: true,
+    nextInvoiceDate: "2026-08-01",
     amount: 299,
     due: "01 Aug 2026",
     status: "Pending",
@@ -67,6 +84,9 @@ const initialCustomers: Customer[] = [
     plate: "Dubai L 9921",
     plan: "Standard",
     planStartDate: "2026-06-15",
+    billingType: "monthly",
+    autoInvoice: true,
+    nextInvoiceDate: "2026-08-15",
     amount: 199,
     due: "01 Aug 2026",
     status: "Paid",
@@ -78,6 +98,9 @@ const initialCustomers: Customer[] = [
     plate: "Fleet · 8 vehicles",
     plan: "Corporate",
     planStartDate: "2026-05-01",
+    billingType: "monthly",
+    autoInvoice: true,
+    nextInvoiceDate: "2026-08-01",
     amount: 1249,
     due: "01 Aug 2026",
     status: "Overdue",
@@ -89,6 +112,9 @@ const initialCustomers: Customer[] = [
     plate: "Sharjah 3 71820",
     plan: "Basic",
     planStartDate: "2026-07-10",
+    billingType: "monthly",
+    autoInvoice: true,
+    nextInvoiceDate: "2026-08-10",
     amount: 99,
     due: "01 Aug 2026",
     status: "Pending",
@@ -108,6 +134,10 @@ export function DashboardController() {
     plate: "",
     plan: "Basic",
     planStartDate: new Date().toISOString().slice(0, 10),
+    amount: 99,
+    billingType: "monthly",
+    autoInvoice: true,
+    nextInvoiceDate: calculateNextInvoiceDate(new Date().toISOString().slice(0, 10), "monthly"),
   });
   const [notice, setNoticeState] = useState<{ message: string; kind: NoticeKind }>({
     message: "",
@@ -129,6 +159,15 @@ export function DashboardController() {
   const [customerView, setCustomerView] = useState<"active" | "archived" | "all">("active");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [activeInvoice, setActiveInvoice] = useState<Invoice | null>(null);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [invoiceEditForm, setInvoiceEditForm] = useState({
+    description: "",
+    total: "",
+    issueDate: "",
+    dueDate: "",
+    reason: "",
+    applyToFuture: false,
+  });
   const [payments, setPayments] = useState<Payment[]>([]);
   const [settings, setSettings] = useState<CompanySettings>({
     companyName: "JM Car Wash",
@@ -194,6 +233,8 @@ export function DashboardController() {
             id: Number(invoice.id),
             customerId: Number(invoice.customerId),
             total: Number(invoice.total),
+            description: String(invoice.description ?? "Car Wash Service"),
+            revisionNumber: Number(invoice.revisionNumber ?? 0),
           })) as Invoice[],
         );
         setPayments(
@@ -217,6 +258,9 @@ export function DashboardController() {
               price?: string | number;
               invoiceStatus?: string | null;
               invoiceDueDate?: string | null;
+              billingType?: Customer["billingType"];
+              autoInvoice?: boolean;
+              nextInvoiceDate?: string | null;
             }) => ({
               id: Number(customer.id),
               name: customer.name,
@@ -226,6 +270,9 @@ export function DashboardController() {
               planStartDate: customer.planStartDate?.slice(0, 10) ?? "",
               archivedAt: customer.archivedAt,
               amount: Number(customer.price ?? 0),
+              billingType: customer.billingType ?? "monthly",
+              autoInvoice: customer.autoInvoice ?? true,
+              nextInvoiceDate: customer.nextInvoiceDate?.slice(0, 10) ?? "",
               due: formatDueDate(customer.invoiceDueDate),
               status: normalizeInvoiceStatus(customer.invoiceStatus),
             }),
@@ -300,7 +347,8 @@ export function DashboardController() {
   function openWhatsApp(customer: Customer) {
     const invoice =
       activeInvoice?.invoiceNumber ?? `JMCW-${new Date().getFullYear()}-${customer.id}`;
-    const message = `Hello ${customer.name}, your JM Car Wash invoice ${invoice} for AED ${customer.amount.toFixed(2)} is ready. Thank you.`;
+    const amount = activeInvoice?.total ?? customer.amount;
+    const message = `Hello ${customer.name}, your JM Car Wash invoice ${invoice} for AED ${amount.toFixed(2)} is ready. Thank you.`;
     window.open(
       `https://wa.me/${customer.phone}?text=${encodeURIComponent(message)}`,
       "_blank",
@@ -434,6 +482,8 @@ export function DashboardController() {
         id: Number(row.id),
         customerId: Number(row.customerId),
         total: Number(row.total),
+        description: String(row.description ?? `${customer.plan} Car Wash Plan`),
+        revisionNumber: Number(row.revisionNumber ?? 0),
       };
       setInvoices((current) =>
         current.some((item) => item.id === invoice.id)
@@ -457,20 +507,76 @@ export function DashboardController() {
     }
   }
 
-  function hasCurrentMonthInvoice(customerId: number) {
-    const now = new Date();
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    return invoices.some(
-      (invoice) =>
-        invoice.customerId === customerId && String(invoice.issueDate).slice(0, 7) === month,
-    );
-  }
-
   function openSavedInvoice(invoice: Invoice) {
     const customer = customers.find((item) => item.id === invoice.customerId);
     if (!customer) return setNotice("Customer record for this invoice is unavailable.", "error");
     setActiveInvoice(invoice);
     setActive(customer);
+  }
+
+  function openInvoiceEditor(invoice: Invoice) {
+    setEditingInvoice(invoice);
+    setInvoiceEditForm({
+      description: invoice.description,
+      total: String(invoice.total),
+      issueDate: String(invoice.issueDate).slice(0, 10),
+      dueDate: String(invoice.dueDate).slice(0, 10),
+      reason: "",
+      applyToFuture: false,
+    });
+  }
+
+  async function saveInvoiceEdit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingInvoice) return;
+    if (
+      editingInvoice.status === "sent" &&
+      !window.confirm("This invoice was already sent. Save the revision and mark it pending?")
+    )
+      return;
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/invoices/${editingInvoice.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...invoiceEditForm,
+          total: Number(invoiceEditForm.total),
+        }),
+      });
+      if (!response.ok)
+        throw new Error((await response.json()).message ?? "Unable to edit invoice");
+      const updated = await response.json();
+      const nextInvoice: Invoice = {
+        ...editingInvoice,
+        ...updated,
+        total: Number(updated.total),
+        revisionNumber: Number(updated.revisionNumber),
+      };
+      setInvoices((current) =>
+        current.map((invoice) => (invoice.id === nextInvoice.id ? nextInvoice : invoice)),
+      );
+      if (activeInvoice?.id === nextInvoice.id) setActiveInvoice(nextInvoice);
+      if (invoiceEditForm.applyToFuture) {
+        setCustomers((current) =>
+          current.map((customer) =>
+            customer.id === nextInvoice.customerId
+              ? { ...customer, amount: nextInvoice.total }
+              : customer,
+          ),
+        );
+      }
+      setEditingInvoice(null);
+      setNotice(
+        `Invoice revised to AED ${nextInvoice.total.toFixed(2)}${
+          invoiceEditForm.applyToFuture ? " and future price updated" : ""
+        }.`,
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Unable to edit invoice.", "error");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function recordPayment(invoice: Invoice) {
@@ -522,6 +628,10 @@ export function DashboardController() {
             plate: customer.plate,
             plan: customer.plan,
             planStartDate: customer.planStartDate,
+            amount: customer.amount,
+            billingType: customer.billingType,
+            autoInvoice: customer.autoInvoice,
+            nextInvoiceDate: customer.nextInvoiceDate,
           }
         : {
             name: "",
@@ -529,6 +639,13 @@ export function DashboardController() {
             plate: "",
             plan: "Basic",
             planStartDate: new Date().toISOString().slice(0, 10),
+            amount: plans[0]?.price ?? 0,
+            billingType: "monthly",
+            autoInvoice: true,
+            nextInvoiceDate: calculateNextInvoiceDate(
+              new Date().toISOString().slice(0, 10),
+              "monthly",
+            ),
           },
     );
     setShowCustomerForm(true);
@@ -550,6 +667,11 @@ export function DashboardController() {
           plateNumber: customerForm.plate,
           planId: selectedPlan.id,
           planStartDate: customerForm.planStartDate,
+          agreedPrice: customerForm.amount,
+          billingType: customerForm.billingType,
+          autoInvoice: customerForm.billingType === "manual" ? false : customerForm.autoInvoice,
+          nextInvoiceDate:
+            customerForm.billingType === "manual" ? null : customerForm.nextInvoiceDate,
         }),
       });
       if (!response.ok)
@@ -558,9 +680,10 @@ export function DashboardController() {
       const record: Customer = {
         id: Number(saved.id),
         ...customerForm,
-        amount: selectedPlan.price,
+        amount: customerForm.amount,
         due: "01 Aug 2026",
         status: editing?.status ?? "Pending",
+        archivedAt: editing?.archivedAt,
       };
       setCustomers((current) =>
         editing
@@ -773,7 +896,10 @@ export function DashboardController() {
                       <td>{customer.phone}</td>
                       <td>
                         {customer.plan}
-                        <small>AED {customer.amount.toFixed(2)}/month</small>
+                        <small>
+                          AED {customer.amount.toFixed(2)} ·{" "}
+                          {customer.billingType.replace("_", " ")}
+                        </small>
                       </td>
                       <td>
                         {customer.planStartDate
@@ -842,6 +968,7 @@ export function DashboardController() {
           <InvoicesPage
             invoices={invoices}
             onView={openSavedInvoice}
+            onEdit={openInvoiceEditor}
             onPaid={(invoice) => void recordPayment(invoice)}
           />
         )}
@@ -1087,9 +1214,14 @@ export function DashboardController() {
                 <span>Subscription plan</span>
                 <select
                   value={customerForm.plan}
-                  onChange={(event) =>
-                    setCustomerForm({ ...customerForm, plan: event.target.value })
-                  }
+                  onChange={(event) => {
+                    const plan = plans.find((item) => item.name === event.target.value);
+                    setCustomerForm({
+                      ...customerForm,
+                      plan: event.target.value,
+                      amount: plan?.price ?? customerForm.amount,
+                    });
+                  }}
                 >
                   {plans.map((plan) => (
                     <option key={plan.id} value={plan.name}>
@@ -1099,16 +1231,88 @@ export function DashboardController() {
                 </select>
               </label>
               <label>
+                <span>Agreed customer price (AED)</span>
+                <input
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={customerForm.amount}
+                  onChange={(event) =>
+                    setCustomerForm({ ...customerForm, amount: Number(event.target.value) })
+                  }
+                />
+                <small>This customer can have a different price from the plan template.</small>
+              </label>
+              <label>
+                <span>Billing type</span>
+                <select
+                  value={customerForm.billingType}
+                  onChange={(event) => {
+                    const billingType = event.target.value as Customer["billingType"];
+                    setCustomerForm({
+                      ...customerForm,
+                      billingType,
+                      autoInvoice: billingType !== "manual",
+                      nextInvoiceDate: calculateNextInvoiceDate(
+                        customerForm.planStartDate,
+                        billingType,
+                      ),
+                    });
+                  }}
+                >
+                  <option value="monthly">Monthly recurring</option>
+                  <option value="weekly">Weekly recurring</option>
+                  <option value="one_time">One-time</option>
+                  <option value="manual">Manual only</option>
+                </select>
+              </label>
+              <label>
                 <span>Plan start date</span>
                 <input
                   required
                   type="date"
                   value={customerForm.planStartDate}
                   onChange={(event) =>
-                    setCustomerForm({ ...customerForm, planStartDate: event.target.value })
+                    setCustomerForm({
+                      ...customerForm,
+                      planStartDate: event.target.value,
+                      nextInvoiceDate: calculateNextInvoiceDate(
+                        event.target.value,
+                        customerForm.billingType,
+                      ),
+                    })
                   }
                 />
               </label>
+              {customerForm.billingType !== "manual" && (
+                <>
+                  <label>
+                    <span>Next invoice date</span>
+                    <input
+                      required
+                      type="date"
+                      value={customerForm.nextInvoiceDate}
+                      onChange={(event) =>
+                        setCustomerForm({
+                          ...customerForm,
+                          nextInvoiceDate: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={customerForm.autoInvoice}
+                      onChange={(event) =>
+                        setCustomerForm({ ...customerForm, autoInvoice: event.target.checked })
+                      }
+                    />
+                    <span>Generate invoices automatically</span>
+                  </label>
+                </>
+              )}
               <div className="form-actions">
                 {editing && (
                   <button
@@ -1225,6 +1429,104 @@ export function DashboardController() {
         </div>
       )}
 
+      {editingInvoice && (
+        <div className="modal-backdrop" onMouseDown={() => setEditingInvoice(null)}>
+          <section className="customer-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <span className="ready">CONTROLLED REVISION</span>
+                <h2>Edit {editingInvoice.invoiceNumber}</h2>
+                <p>Every change is saved in the invoice revision history.</p>
+              </div>
+              <button onClick={() => setEditingInvoice(null)}>×</button>
+            </div>
+            <form className="customer-form" onSubmit={saveInvoiceEdit}>
+              <label>
+                <span>Description</span>
+                <input
+                  required
+                  value={invoiceEditForm.description}
+                  onChange={(event) =>
+                    setInvoiceEditForm({
+                      ...invoiceEditForm,
+                      description: event.target.value,
+                    })
+                  }
+                />
+              </label>
+              <label>
+                <span>Invoice amount (AED)</span>
+                <input
+                  required
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={invoiceEditForm.total}
+                  onChange={(event) =>
+                    setInvoiceEditForm({ ...invoiceEditForm, total: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                <span>Issue date</span>
+                <input
+                  required
+                  type="date"
+                  value={invoiceEditForm.issueDate}
+                  onChange={(event) =>
+                    setInvoiceEditForm({ ...invoiceEditForm, issueDate: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                <span>Due date</span>
+                <input
+                  required
+                  type="date"
+                  value={invoiceEditForm.dueDate}
+                  onChange={(event) =>
+                    setInvoiceEditForm({ ...invoiceEditForm, dueDate: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                <span>Reason for change</span>
+                <input
+                  required
+                  minLength={3}
+                  value={invoiceEditForm.reason}
+                  onChange={(event) =>
+                    setInvoiceEditForm({ ...invoiceEditForm, reason: event.target.value })
+                  }
+                  placeholder="e.g. Extra service added"
+                />
+              </label>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={invoiceEditForm.applyToFuture}
+                  onChange={(event) =>
+                    setInvoiceEditForm({
+                      ...invoiceEditForm,
+                      applyToFuture: event.target.checked,
+                    })
+                  }
+                />
+                <span>Use this amount for future invoices too</span>
+              </label>
+              <div className="form-actions">
+                <button type="button" className="secondary" onClick={() => setEditingInvoice(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary" disabled={isSaving}>
+                  {isSaving ? "Saving…" : "Save revision"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
       {active && (
         <div
           className="modal-backdrop"
@@ -1305,18 +1607,20 @@ export function DashboardController() {
                 <tbody>
                   <tr>
                     <td>
-                      <strong>{active.plan} Car Wash Plan</strong>
+                      <strong>
+                        {activeInvoice?.description ?? `${active.plan} Car Wash Plan`}
+                      </strong>
                       <small>Monthly subscription</small>
                     </td>
                     <td>1</td>
-                    <td>AED {active.amount.toFixed(2)}</td>
+                    <td>AED {(activeInvoice?.total ?? active.amount).toFixed(2)}</td>
                   </tr>
                 </tbody>
               </table>
               <div className="totals">
                 <p className="total">
                   <span>Total due</span>
-                  <b>AED {active.amount.toFixed(2)}</b>
+                  <b>AED {(activeInvoice?.total ?? active.amount).toFixed(2)}</b>
                 </p>
               </div>
             </div>

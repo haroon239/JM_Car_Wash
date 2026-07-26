@@ -9,4 +9,18 @@ export const paymentSchema = z.object({
 export const invoiceStatusSchema = z.object({
   status: z.enum(["pending", "sent", "paid", "overdue"]),
 });
+
+export const invoiceEditSchema = z
+  .object({
+    description: z.string().trim().min(2).max(200),
+    total: z.coerce.number().positive().max(9999999),
+    issueDate: z.iso.date(),
+    dueDate: z.iso.date(),
+    reason: z.string().trim().min(3).max(300),
+    applyToFuture: z.boolean(),
+  })
+  .refine((value) => value.dueDate >= value.issueDate, {
+    message: "Due date must be on or after the issue date",
+    path: ["dueDate"],
+  });
 export type PaymentInput = z.infer<typeof paymentSchema>;

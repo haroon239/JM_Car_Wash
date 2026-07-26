@@ -1,6 +1,7 @@
 import {
   createInvoice,
-  findCustomersMissingCurrentInvoice,
+  advanceCustomerBilling,
+  findCustomersDueForInvoice,
   markPastDueInvoicesOverdue,
 } from "../models/invoice.model.js";
 
@@ -9,15 +10,17 @@ const RUN_MINUTE_AFTER_MIDNIGHT = 5;
 
 export async function runBillingMaintenance() {
   const overdueCount = await markPastDueInvoicesOverdue();
-  const customers = await findCustomersMissingCurrentInvoice();
+  const customers = await findCustomersDueForInvoice();
 
   let generatedCount = 0;
   for (const customer of customers) {
     const invoice = await createInvoice(Number(customer.id), {
       issueDate: customer.invoiceDate,
+      billingPeriod: customer.invoiceDate,
       source: "automatic",
     });
     if (!invoice.wasExisting) generatedCount += 1;
+    await advanceCustomerBilling(Number(customer.id), customer.billingType);
   }
 
   console.log(

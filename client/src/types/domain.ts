@@ -7,10 +7,24 @@ export type Customer = {
   amount: number;
   due: string;
   planStartDate: string;
+  billingType: "monthly" | "weekly" | "one_time" | "manual";
+  autoInvoice: boolean;
+  nextInvoiceDate: string;
   status: "Paid" | "Pending" | "Sent" | "Overdue";
   archivedAt?: string | null;
 };
-export type CustomerForm = Pick<Customer, "name" | "phone" | "plate" | "plan" | "planStartDate">;
+export type CustomerForm = Pick<
+  Customer,
+  | "name"
+  | "phone"
+  | "plate"
+  | "plan"
+  | "planStartDate"
+  | "amount"
+  | "billingType"
+  | "autoInvoice"
+  | "nextInvoiceDate"
+>;
 export type Plan = { id: number; name: string; price: number; washesPerMonth: number | null };
 export type Invoice = {
   id: number;
@@ -24,6 +38,8 @@ export type Invoice = {
   issueDate: string;
   dueDate: string;
   sentAt?: string | null;
+  description: string;
+  revisionNumber: number;
 };
 export type Payment = {
   id: number;

@@ -3,10 +3,12 @@ export function InvoicesPage({
   invoices,
   onView,
   onPaid,
+  onEdit,
 }: {
   invoices: Invoice[];
   onView: (i: Invoice) => void;
   onPaid: (i: Invoice) => void;
+  onEdit: (i: Invoice) => void;
 }) {
   return (
     <section className="panel section-panel">
@@ -34,6 +36,7 @@ export function InvoicesPage({
                 <td>
                   <strong>{i.invoiceNumber}</strong>
                   <small>{new Date(i.issueDate).toLocaleDateString("en-GB")}</small>
+                  {i.revisionNumber > 0 && <small>Revision {i.revisionNumber}</small>}
                 </td>
                 <td>
                   {i.customerName}
@@ -51,6 +54,11 @@ export function InvoicesPage({
                     <button className="send-button" onClick={() => onView(i)}>
                       View PDF
                     </button>
+                    {i.status !== "paid" && (
+                      <button className="edit-button" onClick={() => onEdit(i)}>
+                        Edit
+                      </button>
+                    )}
                     {i.status !== "paid" && (
                       <button className="paid-button" onClick={() => onPaid(i)}>
                         Mark paid
