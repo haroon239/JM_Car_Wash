@@ -107,6 +107,10 @@ button {
   border-radius: 20px;
   font-size: 11px;
 }
+.nav-item b.alert-count {
+  background: #d94848;
+  color: white;
+}
 .nav-item.active {
   background: #1b4b51;
   color: #fff;
@@ -434,6 +438,88 @@ td small {
 .status.overdue {
   background: #fde8e8;
   color: #b44545;
+}
+.status.action-expiring {
+  background: #fff1cf;
+  color: #946200;
+}
+.status.action-expires-today,
+.status.action-expired,
+.status.action-payment-overdue {
+  background: #fde2e2;
+  color: #b42323;
+}
+.status.action-invoice-ready {
+  background: #fff0d7;
+  color: #a45f00;
+}
+.status.action-payment-pending {
+  background: #e5f0ff;
+  color: #2864a8;
+}
+.alert-row.expiring {
+  background: #fffdf5;
+}
+.alert-row.expires-today,
+.alert-row.expired,
+.alert-row.payment-overdue {
+  background: #fff7f7;
+}
+.alert-row.invoice-ready {
+  background: #fffcf5;
+}
+.action-required {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 16px;
+  padding: 14px 17px;
+  border: 1px solid #efb6b6;
+  border-left: 4px solid #d94848;
+  border-radius: 11px;
+  background: #fff7f7;
+}
+.action-required-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #d94848;
+  color: white;
+  font-weight: 900;
+}
+.action-required div:nth-child(2) {
+  min-width: 0;
+}
+.action-required strong {
+  font-size: 14px;
+}
+.action-required p {
+  margin: 3px 0 0;
+  color: #7d5555;
+  font-size: 11px;
+}
+.action-required button {
+  margin-left: auto;
+  border: 1px solid #d94848;
+  border-radius: 8px;
+  padding: 8px 11px;
+  background: white;
+  color: #b42323;
+  font-weight: 700;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .action-required {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .action-required button {
+    width: 100%;
+    margin-left: 47px;
+  }
 }
 .send-button {
   border: 1px solid #b8dcd8;

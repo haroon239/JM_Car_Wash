@@ -62,6 +62,34 @@ function calculateNextInvoiceDate(startDate: string, billingType: Customer["bill
   return date.toISOString().slice(0, 10);
 }
 
+type CustomerActionKind =
+  | "expiring"
+  | "expires-today"
+  | "expired"
+  | "invoice-ready"
+  | "payment-pending"
+  | "payment-overdue";
+
+type CustomerAction = {
+  kind: CustomerActionKind;
+  label: string;
+  invoice?: Invoice;
+};
+
+function daysFromDubaiToday(date: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Dubai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  const todayUtc = Date.UTC(value("year"), value("month") - 1, value("day"));
+  const targetUtc = new Date(`${date.slice(0, 10)}T00:00:00Z`).getTime();
+  return Math.round((targetUtc - todayUtc) / 86_400_000);
+}
+
 const initialCustomers: Customer[] = [
   {
     id: 1048,
@@ -318,6 +346,55 @@ export function DashboardController() {
   const activeCustomers = useMemo(
     () => customers.filter((customer) => !customer.archivedAt),
     [customers],
+  );
+  const customerActions = useMemo(() => {
+    const latestInvoiceByCustomer = new Map<number, Invoice>();
+    for (const invoice of invoices) {
+      if (!latestInvoiceByCustomer.has(invoice.customerId))
+        latestInvoiceByCustomer.set(invoice.customerId, invoice);
+    }
+
+    return activeCustomers
+      .map((customer) => {
+        const invoice = latestInvoiceByCustomer.get(customer.id);
+        const invoiceStatus = invoice?.status.toLowerCase();
+        let action: CustomerAction | null = null;
+
+        if (invoiceStatus === "overdue") {
+          action = { kind: "payment-overdue", label: "Payment overdue", invoice };
+        } else if (invoiceStatus === "pending") {
+          action = { kind: "invoice-ready", label: "Invoice ready", invoice };
+        } else if (invoiceStatus === "sent") {
+          action = { kind: "payment-pending", label: "Payment pending", invoice };
+        } else if (customer.nextInvoiceDate) {
+          const days = daysFromDubaiToday(customer.nextInvoiceDate);
+          if (days < 0) action = { kind: "expired", label: "Plan expired" };
+          else if (days === 0) action = { kind: "expires-today", label: "Expires today" };
+          else if (days <= 3)
+            action = {
+              kind: "expiring",
+              label: `Expires in ${days} day${days === 1 ? "" : "s"}`,
+            };
+        }
+
+        return action ? { customer, action } : null;
+      })
+      .filter((item): item is { customer: Customer; action: CustomerAction } => item !== null);
+  }, [activeCustomers, invoices]);
+  const customerActionMap = useMemo(
+    () => new Map(customerActions.map((item) => [item.customer.id, item.action])),
+    [customerActions],
+  );
+  const actionCounts = useMemo(
+    () => ({
+      expiring: customerActions.filter((item) =>
+        ["expiring", "expires-today", "expired"].includes(item.action.kind),
+      ).length,
+      ready: customerActions.filter((item) => item.action.kind === "invoice-ready").length,
+      overdue: customerActions.filter((item) => item.action.kind === "payment-overdue").length,
+      pending: customerActions.filter((item) => item.action.kind === "payment-pending").length,
+    }),
+    [customerActions],
   );
   const filtered = useMemo(
     () =>
@@ -804,6 +881,7 @@ export function DashboardController() {
         onNavigate={setSection}
         activeCustomers={activeCustomers.length}
         customers={customers}
+        actionCount={customerActions.length}
       />
 
       <section className={`content section-${section}`}>
@@ -878,7 +956,14 @@ export function DashboardController() {
                 </thead>
                 <tbody>
                   {customerFiltered.map((customer) => (
-                    <tr key={customer.id}>
+                    <tr
+                      key={customer.id}
+                      className={
+                        customerActionMap.get(customer.id)
+                          ? `alert-row ${customerActionMap.get(customer.id)?.kind}`
+                          : ""
+                      }
+                    >
                       <td>
                         <div className="customer-cell">
                           <span>
@@ -932,6 +1017,12 @@ export function DashboardController() {
                       <td>
                         {customer.archivedAt ? (
                           <i className="status archived">Archived</i>
+                        ) : customerActionMap.get(customer.id) ? (
+                          <i
+                            className={`status action-${customerActionMap.get(customer.id)?.kind}`}
+                          >
+                            {customerActionMap.get(customer.id)?.label}
+                          </i>
                         ) : (
                           <i className="status paid">Active</i>
                         )}
@@ -955,9 +1046,17 @@ export function DashboardController() {
                               </button>
                               <button
                                 className="send-button"
-                                onClick={() => void prepareInvoice(customer)}
+                                onClick={() => {
+                                  const invoice = customerActionMap.get(customer.id)?.invoice;
+                                  if (invoice) openSavedInvoice(invoice);
+                                  else void prepareInvoice(customer);
+                                }}
                               >
-                                Invoice
+                                {customerActionMap.get(customer.id)?.invoice
+                                  ? "View invoice"
+                                  : customerActionMap.get(customer.id)
+                                    ? "Generate invoice"
+                                    : "Invoice"}
                               </button>
                             </>
                           )}
@@ -1004,40 +1103,62 @@ export function DashboardController() {
           />
         )}
 
+        {section === "overview" && customerActions.length > 0 && (
+          <section className="action-required">
+            <div className="action-required-icon">!</div>
+            <div>
+              <strong>Action required</strong>
+              <p>
+                {actionCounts.expiring} expiring · {actionCounts.ready} ready to send ·{" "}
+                {actionCounts.pending} awaiting payment · {actionCounts.overdue} overdue
+              </p>
+            </div>
+            <button onClick={() => setSection("customers")}>Review customers</button>
+          </section>
+        )}
+
         <div className="stats">
           <article>
             <div className="stat-icon aqua">♙</div>
             <div>
               <small>ACTIVE CUSTOMERS</small>
-              <strong>776</strong>
-              <p>
-                <em>+12</em> this month
-              </p>
+              <strong>{activeCustomers.length}</strong>
+              <p>Current active records</p>
             </div>
           </article>
           <article>
             <div className="stat-icon blue">د.إ</div>
             <div>
               <small>MONTHLY REVENUE</small>
-              <strong>AED 86,420</strong>
-              <p>
-                <em>+8.2%</em> vs last month
-              </p>
+              <strong>
+                AED{" "}
+                {activeCustomers
+                  .filter((customer) => customer.billingType === "monthly")
+                  .reduce((sum, customer) => sum + customer.amount, 0)
+                  .toFixed(2)}
+              </strong>
+              <p>Monthly agreements</p>
             </div>
           </article>
           <article>
             <div className="stat-icon amber">◷</div>
             <div>
               <small>PAYMENT PENDING</small>
-              <strong>AED 7,840</strong>
-              <p>24 invoices due</p>
+              <strong>
+                AED{" "}
+                {invoices
+                  .filter((invoice) => ["pending", "sent"].includes(invoice.status))
+                  .reduce((sum, invoice) => sum + invoice.total, 0)
+                  .toFixed(2)}
+              </strong>
+              <p>{actionCounts.ready + actionCounts.pending} invoices due</p>
             </div>
           </article>
           <article>
             <div className="stat-icon red">!</div>
             <div>
               <small>OVERDUE</small>
-              <strong>8</strong>
+              <strong>{actionCounts.overdue}</strong>
               <p>Needs attention</p>
             </div>
           </article>
@@ -1077,54 +1198,67 @@ export function DashboardController() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((customer) => (
-                    <tr key={customer.id}>
-                      <td>
-                        <div className="customer-cell">
-                          <span>
-                            {customer.name
-                              .split(" ")
-                              .map((part) => part[0])
-                              .slice(0, 2)
-                              .join("")}
-                          </span>
-                          <div>
-                            <strong>{customer.name}</strong>
-                            <small>{customer.plate}</small>
+                  {filtered
+                    .filter((customer) => customerActionMap.has(customer.id))
+                    .map((customer) => (
+                      <tr
+                        key={customer.id}
+                        className={`alert-row ${customerActionMap.get(customer.id)?.kind}`}
+                      >
+                        <td>
+                          <div className="customer-cell">
+                            <span>
+                              {customer.name
+                                .split(" ")
+                                .map((part) => part[0])
+                                .slice(0, 2)
+                                .join("")}
+                            </span>
+                            <div>
+                              <strong>{customer.name}</strong>
+                              <small>{customer.plate}</small>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td>
-                        <strong>{customer.plan}</strong>
-                        <small>{customer.due}</small>
-                      </td>
-                      <td>
-                        <strong>AED {customer.amount.toFixed(2)}</strong>
-                        <small>Ready to generate</small>
-                      </td>
-                      <td>
-                        <i className={`status ${customer.status.toLowerCase()}`}>
-                          {customer.status}
-                        </i>
-                      </td>
-                      <td>
-                        <div className="row-actions">
-                          <button
-                            className="edit-button"
-                            onClick={() => openCustomerForm(customer)}
+                        </td>
+                        <td>
+                          <strong>{customer.plan}</strong>
+                          <small>{customer.due}</small>
+                        </td>
+                        <td>
+                          <strong>AED {customer.amount.toFixed(2)}</strong>
+                          <small>{customerActionMap.get(customer.id)?.label}</small>
+                        </td>
+                        <td>
+                          <i
+                            className={`status action-${customerActionMap.get(customer.id)?.kind}`}
                           >
-                            Edit
-                          </button>
-                          <button
-                            className="send-button"
-                            onClick={() => void prepareInvoice(customer)}
-                          >
-                            Prepare invoice
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            {customerActionMap.get(customer.id)?.label}
+                          </i>
+                        </td>
+                        <td>
+                          <div className="row-actions">
+                            <button
+                              className="edit-button"
+                              onClick={() => openCustomerForm(customer)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="send-button"
+                              onClick={() => {
+                                const invoice = customerActionMap.get(customer.id)?.invoice;
+                                if (invoice) openSavedInvoice(invoice);
+                                else void prepareInvoice(customer);
+                              }}
+                            >
+                              {customerActionMap.get(customer.id)?.invoice
+                                ? "View & send"
+                                : "Generate invoice"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>

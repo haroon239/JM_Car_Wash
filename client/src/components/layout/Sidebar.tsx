@@ -4,6 +4,7 @@ type Props = {
   onNavigate: (section: Section) => void;
   activeCustomers: number;
   customers: Customer[];
+  actionCount: number;
 };
 const items: [Section, string, string][] = [
   ["overview", "⌂", "Overview"],
@@ -13,7 +14,7 @@ const items: [Section, string, string][] = [
   ["payments", "◷", "Payment history"],
   ["settings", "⚙", "Settings"],
 ];
-export function Sidebar({ section, onNavigate, activeCustomers, customers }: Props) {
+export function Sidebar({ section, onNavigate, activeCustomers, customers, actionCount }: Props) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -34,6 +35,7 @@ export function Sidebar({ section, onNavigate, activeCustomers, customers }: Pro
             {label}
             {id === "customers" && <b>{activeCustomers}</b>}
             {id === "invoices" && <b>{customers.filter((c) => c.status !== "Paid").length}</b>}
+            {id === "overview" && actionCount > 0 && <b className="alert-count">{actionCount}</b>}
           </button>
         ))}
       </nav>
