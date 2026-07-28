@@ -419,6 +419,226 @@ td small {
   display: flex;
   flex-direction: column;
 }
+.customer-name-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.customer-name-button:hover {
+  color: var(--teal);
+  text-decoration: underline;
+}
+.customer-profile {
+  display: grid;
+  gap: 16px;
+}
+.profile-back {
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  color: var(--teal);
+  padding: 3px 0;
+  font-weight: 700;
+}
+.profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 22px;
+}
+.profile-avatar {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 14px;
+  background: #dff3f1;
+  color: var(--teal);
+  font-size: 17px;
+  font-weight: 900;
+}
+.profile-identity {
+  min-width: 0;
+}
+.profile-identity h2 {
+  margin: 5px 0 4px;
+  font-size: 23px;
+}
+.profile-identity p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.profile-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.profile-financials {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 13px;
+}
+.profile-financials article {
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: white;
+}
+.profile-financials article.critical {
+  border-color: #efb6b6;
+  background: #fff8f8;
+}
+.profile-financials small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+}
+.profile-financials strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 19px;
+}
+.profile-financials p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.profile-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+}
+.profile-tabs button {
+  border: 0;
+  border-radius: 7px;
+  padding: 9px 15px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.profile-tabs button.active {
+  background: #e4f4f2;
+  color: var(--teal);
+}
+.profile-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.profile-detail-card {
+  padding: 19px;
+}
+.profile-detail-card h3 {
+  margin: 0 0 14px;
+}
+.profile-detail-card dl,
+.profile-detail-card p {
+  margin: 0;
+}
+.profile-detail-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 8px 0;
+  border-bottom: 1px solid #edf1f2;
+  font-size: 11px;
+}
+.profile-detail-card dt {
+  color: var(--muted);
+}
+.profile-detail-card dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.profile-detail-card > p {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.profile-list {
+  overflow: hidden;
+}
+.activity-timeline {
+  padding: 0 22px 24px;
+}
+.activity-timeline article {
+  position: relative;
+  display: grid;
+  grid-template-columns: 15px 1fr;
+  gap: 11px;
+  padding: 10px 0;
+}
+.activity-timeline article > span {
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 2px #b9ded9;
+}
+.activity-timeline article:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 25px;
+  bottom: -6px;
+  width: 2px;
+  background: #dfe9e9;
+}
+.activity-timeline p {
+  margin: 3px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.activity-timeline small {
+  color: #95a0a5;
+  font-size: 9px;
+}
+@media (max-width: 900px) {
+  .profile-financials {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .profile-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  .profile-hero {
+    flex-wrap: wrap;
+  }
+  .profile-actions {
+    width: 100%;
+    margin-left: 74px;
+  }
+}
+@media (max-width: 600px) {
+  .profile-financials {
+    grid-template-columns: 1fr;
+  }
+  .profile-actions {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .profile-actions button {
+    flex: 1;
+  }
+  .profile-tabs {
+    overflow-x: auto;
+  }
+}
 .status {
   display: inline-block;
   border-radius: 20px;

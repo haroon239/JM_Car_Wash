@@ -1,4 +1,5 @@
 import { requireDatabase } from "../config/database.js";
+import { logCustomerActivity } from "./activity.model.js";
 
 const uaeToday = "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dubai')::DATE";
 
@@ -103,6 +104,11 @@ export async function createInvoice(customerId: number, options: InvoiceGenerati
          revision_number AS "revisionNumber"`,
       [invoiceNumber, id],
     );
+    await client.query(
+      `INSERT INTO customer_activities(customer_id,activity_type,title,details)
+       VALUES($1,'invoice_generated','Invoice generated',$2)`,
+      [customerId, `${invoiceNumber} generated for AED ${total.toFixed(2)}.`],
+    );
     await client.query("COMMIT");
     return invoiceWithCustomer(result.rows[0], customer.rows[0], false);
   } catch (error) {
@@ -191,7 +197,7 @@ export async function markPastDueInvoicesOverdue() {
 }
 
 export async function updateInvoiceStatus(id: number, status: string) {
-  return (
+  const result = (
     await requireDatabase().query(
       `UPDATE invoices
        SET status=$1::VARCHAR,
@@ -201,10 +207,20 @@ export async function updateInvoiceStatus(id: number, status: string) {
            ELSE sent_at
          END
        WHERE id=$2
-       RETURNING id,status,sent_at AS "sentAt"`,
+       RETURNING id,status,sent_at AS "sentAt",customer_id AS "customerId",
+         invoice_number AS "invoiceNumber"`,
       [status, id],
     )
   ).rows[0];
+  if (result && ["sent", "pending"].includes(status)) {
+    await logCustomerActivity(
+      Number(result.customerId),
+      status === "sent" ? "invoice_sent" : "invoice_unsent",
+      status === "sent" ? "Invoice marked sent" : "Invoice marked unsent",
+      result.invoiceNumber,
+    );
+  }
+  return result;
 }
 
 export type InvoiceEditInput = {
@@ -263,6 +279,14 @@ export async function editInvoice(id: number, input: InvoiceEditInput) {
         [input.total, current.rows[0].customer_id],
       );
     }
+    await client.query(
+      `INSERT INTO customer_activities(customer_id,activity_type,title,details)
+       VALUES($1,'invoice_revised','Invoice revised',$2)`,
+      [
+        current.rows[0].customer_id,
+        `Revision ${revisionNumber}: ${input.reason}. Amount AED ${Number(current.rows[0].total).toFixed(2)} → AED ${input.total.toFixed(2)}.`,
+      ],
+    );
     await client.query("COMMIT");
     return updated.rows[0];
   } catch (error) {

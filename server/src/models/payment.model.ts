@@ -14,7 +14,8 @@ export async function createPayment(input: PaymentInput) {
   try {
     await client.query("BEGIN");
     const invoice = await client.query(
-      "SELECT id,total,status FROM invoices WHERE id=$1 FOR UPDATE",
+      `SELECT id,total,status,customer_id,invoice_number
+       FROM invoices WHERE id=$1 FOR UPDATE`,
       [input.invoiceId],
     );
     if (!invoice.rowCount) throw Object.assign(new Error("Invoice not found"), { status: 404 });
@@ -25,6 +26,14 @@ export async function createPayment(input: PaymentInput) {
       [input.invoiceId, invoice.rows[0].total, input.method, input.reference],
     );
     await client.query("UPDATE invoices SET status='paid' WHERE id=$1", [input.invoiceId]);
+    await client.query(
+      `INSERT INTO customer_activities(customer_id,activity_type,title,details)
+       VALUES($1,'payment_received','Payment received',$2)`,
+      [
+        invoice.rows[0].customer_id,
+        `AED ${Number(invoice.rows[0].total).toFixed(2)} received for ${invoice.rows[0].invoice_number} via ${input.method.replace("_", " ")}.`,
+      ],
+    );
     await client.query("COMMIT");
     return result.rows[0];
   } catch (error) {

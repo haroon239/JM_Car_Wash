@@ -5,6 +5,7 @@ import { Sidebar } from "../../components/layout/Sidebar";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { Notice, type NoticeKind } from "../../components/common/Notice";
 import { InvoicesPage } from "../../pages/InvoicesPage";
+import { CustomerProfilePage } from "../../pages/CustomerProfilePage";
 import { PaymentsPage } from "../../pages/PaymentsPage";
 import { PlansPage } from "../../pages/PlansPage";
 import { SettingsPage } from "../../pages/SettingsPage";
@@ -13,6 +14,7 @@ import type {
   Customer,
   CustomerForm,
   Invoice,
+  CustomerActivity,
   Payment,
   Plan,
   Section,
@@ -99,6 +101,7 @@ const initialCustomers: Customer[] = [
     buildingNo: "",
     flatNo: "",
     parkingNo: "",
+    customerSince: "2026-07-01",
     plan: "Premium",
     planStartDate: "2026-07-01",
     billingType: "monthly",
@@ -116,6 +119,7 @@ const initialCustomers: Customer[] = [
     buildingNo: "",
     flatNo: "",
     parkingNo: "",
+    customerSince: "2026-06-15",
     plan: "Standard",
     planStartDate: "2026-06-15",
     billingType: "monthly",
@@ -132,6 +136,7 @@ const initialCustomers: Customer[] = [
     buildingNo: "",
     flatNo: "",
     parkingNo: "",
+    customerSince: "2026-05-01",
     plate: "Fleet · 8 vehicles",
     plan: "Corporate",
     planStartDate: "2026-05-01",
@@ -150,6 +155,7 @@ const initialCustomers: Customer[] = [
     buildingNo: "",
     flatNo: "",
     parkingNo: "",
+    customerSince: "2026-07-10",
     plan: "Basic",
     planStartDate: "2026-07-10",
     billingType: "monthly",
@@ -203,6 +209,8 @@ export function DashboardController() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [activeInvoice, setActiveInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [profileCustomerId, setProfileCustomerId] = useState<number | null>(null);
+  const [profileActivities, setProfileActivities] = useState<CustomerActivity[]>([]);
   const [invoiceEditForm, setInvoiceEditForm] = useState({
     description: "",
     total: "",
@@ -221,6 +229,12 @@ export function DashboardController() {
     invoicePrefix: "JMCW",
     vatRate: 0,
   });
+  const profileCustomer = customers.find((customer) => customer.id === profileCustomerId) ?? null;
+  const profileInvoices = profileCustomer
+    ? invoices.filter((invoice) => invoice.customerId === profileCustomer.id)
+    : [];
+  const profileInvoiceIds = new Set(profileInvoices.map((invoice) => invoice.id));
+  const profilePayments = payments.filter((payment) => profileInvoiceIds.has(payment.invoiceId));
 
   useEffect(() => {
     async function loadDatabaseData() {
@@ -300,6 +314,7 @@ export function DashboardController() {
               buildingNo?: string | null;
               flatNo?: string | null;
               parkingNo?: string | null;
+              customerSince?: string | null;
               planStartDate?: string;
               archivedAt?: string | null;
               plan?: string;
@@ -317,6 +332,7 @@ export function DashboardController() {
               buildingNo: customer.buildingNo ?? "",
               flatNo: customer.flatNo ?? "",
               parkingNo: customer.parkingNo ?? "",
+              customerSince: customer.customerSince ?? new Date().toISOString(),
               plan: customer.plan ?? "No plan",
               planStartDate: customer.planStartDate?.slice(0, 10) ?? "",
               archivedAt: customer.archivedAt,
@@ -338,6 +354,31 @@ export function DashboardController() {
 
   function setNotice(message: string, kind: NoticeKind = "success") {
     setNoticeState({ message, kind });
+  }
+
+  async function openCustomerProfile(customer: Customer) {
+    setProfileCustomerId(customer.id);
+    setProfileActivities([]);
+    try {
+      const response = await fetch(`/api/customers/${customer.id}/activity`);
+      if (!response.ok) throw new Error("Unable to load customer activity");
+      const rows = await response.json();
+      setProfileActivities(
+        rows.map((activity: Record<string, string | number | null>) => ({
+          ...activity,
+          id: Number(activity.id),
+        })) as CustomerActivity[],
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Unable to load customer activity.",
+        "error",
+      );
+    }
+  }
+
+  function openCustomerWhatsApp(customer: Customer) {
+    window.open(`https://wa.me/${customer.phone}`, "_blank", "noopener,noreferrer");
   }
 
   useEffect(() => {
@@ -793,6 +834,7 @@ export function DashboardController() {
         due: "01 Aug 2026",
         status: editing?.status ?? "Pending",
         archivedAt: editing?.archivedAt,
+        customerSince: editing?.customerSince ?? saved.created_at ?? new Date().toISOString(),
       };
       setCustomers((current) =>
         editing
@@ -931,7 +973,7 @@ export function DashboardController() {
           onClose={() => setNoticeState({ message: "", kind: "success" })}
         />
 
-        {section === "customers" && (
+        {section === "customers" && !profileCustomer && (
           <section className="panel section-panel">
             <div className="panel-head">
               <div>
@@ -1006,7 +1048,12 @@ export function DashboardController() {
                               .join("")}
                           </span>
                           <div>
-                            <strong>{customer.name}</strong>
+                            <button
+                              className="customer-name-button"
+                              onClick={() => void openCustomerProfile(customer)}
+                            >
+                              {customer.name}
+                            </button>
                             <small>{customer.plate}</small>
                           </div>
                         </div>
@@ -1103,6 +1150,21 @@ export function DashboardController() {
               )}
             </div>
           </section>
+        )}
+
+        {section === "customers" && profileCustomer && (
+          <CustomerProfilePage
+            customer={profileCustomer}
+            invoices={profileInvoices}
+            payments={profilePayments}
+            activities={profileActivities}
+            onBack={() => setProfileCustomerId(null)}
+            onEdit={() => openCustomerForm(profileCustomer)}
+            onGenerateInvoice={() => void prepareInvoice(profileCustomer)}
+            onWhatsApp={() => openCustomerWhatsApp(profileCustomer)}
+            onViewInvoice={openSavedInvoice}
+            onMarkPaid={(invoice) => void recordPayment(invoice)}
+          />
         )}
 
         {section === "plans" && (

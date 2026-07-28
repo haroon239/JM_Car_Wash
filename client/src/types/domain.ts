@@ -6,6 +6,7 @@ export type Customer = {
   buildingNo: string;
   flatNo: string;
   parkingNo: string;
+  customerSince: string;
   plan: string;
   amount: number;
   due: string;
@@ -57,6 +58,14 @@ export type Payment = {
   reference?: string | null;
   paidAt: string;
   recordedBy: string;
+};
+export type CustomerActivity = {
+  id: number;
+  activityType: string;
+  title: string;
+  details?: string | null;
+  actor: string;
+  createdAt: string;
 };
 export type Section = "overview" | "customers" | "plans" | "invoices" | "payments" | "settings";
 export type CustomerView = "active" | "archived" | "all";
