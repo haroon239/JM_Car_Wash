@@ -3,6 +3,9 @@ export type Customer = {
   name: string;
   phone: string;
   plate: string;
+  buildingNo: string;
+  flatNo: string;
+  parkingNo: string;
   plan: string;
   amount: number;
   due: string;
@@ -18,6 +21,9 @@ export type CustomerForm = Pick<
   | "name"
   | "phone"
   | "plate"
+  | "buildingNo"
+  | "flatNo"
+  | "parkingNo"
   | "plan"
   | "planStartDate"
   | "amount"
@@ -56,6 +62,8 @@ export type Section = "overview" | "customers" | "plans" | "invoices" | "payment
 export type CustomerView = "active" | "archived" | "all";
 export type CompanySettings = {
   companyName: string;
+  phone: string;
+  email: string;
   trn: string;
   address: string;
   invoicePrefix: string;

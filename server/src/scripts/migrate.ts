@@ -17,6 +17,7 @@ const sqlPaths = [
   fileURLToPath(new URL("../../sql/006_invoice_generation_source.sql", import.meta.url)),
   fileURLToPath(new URL("../../sql/007_remove_vat.sql", import.meta.url)),
   fileURLToPath(new URL("../../sql/008_flexible_billing.sql", import.meta.url)),
+  fileURLToPath(new URL("../../sql/009_company_contact_and_location.sql", import.meta.url)),
 ];
 const client = new pg.Client({ connectionString });
 

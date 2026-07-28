@@ -96,6 +96,9 @@ const initialCustomers: Customer[] = [
     name: "Omar Khalid",
     phone: "971501234567",
     plate: "Dubai A 45218",
+    buildingNo: "",
+    flatNo: "",
+    parkingNo: "",
     plan: "Premium",
     planStartDate: "2026-07-01",
     billingType: "monthly",
@@ -110,6 +113,9 @@ const initialCustomers: Customer[] = [
     name: "Aisha Rahman",
     phone: "971522719834",
     plate: "Dubai L 9921",
+    buildingNo: "",
+    flatNo: "",
+    parkingNo: "",
     plan: "Standard",
     planStartDate: "2026-06-15",
     billingType: "monthly",
@@ -123,6 +129,9 @@ const initialCustomers: Customer[] = [
     id: 1046,
     name: "Nabil Motors LLC",
     phone: "971555410882",
+    buildingNo: "",
+    flatNo: "",
+    parkingNo: "",
     plate: "Fleet · 8 vehicles",
     plan: "Corporate",
     planStartDate: "2026-05-01",
@@ -138,6 +147,9 @@ const initialCustomers: Customer[] = [
     name: "Hassan Ali",
     phone: "971504128765",
     plate: "Sharjah 3 71820",
+    buildingNo: "",
+    flatNo: "",
+    parkingNo: "",
     plan: "Basic",
     planStartDate: "2026-07-10",
     billingType: "monthly",
@@ -160,6 +172,9 @@ export function DashboardController() {
     name: "",
     phone: "971",
     plate: "",
+    buildingNo: "",
+    flatNo: "",
+    parkingNo: "",
     plan: "Basic",
     planStartDate: new Date().toISOString().slice(0, 10),
     amount: 99,
@@ -198,7 +213,9 @@ export function DashboardController() {
   });
   const [payments, setPayments] = useState<Payment[]>([]);
   const [settings, setSettings] = useState<CompanySettings>({
-    companyName: "JM Car Wash",
+    companyName: "JAHAN MUHAMMAD FOR CAR WASHING & CLEANING CO.",
+    phone: "+971 52 8843039",
+    email: "jmcwashandcleaning@gmail.com",
     trn: "",
     address: "United Arab Emirates",
     invoicePrefix: "JMCW",
@@ -280,6 +297,9 @@ export function DashboardController() {
               name: string;
               phone: string;
               plateNumber: string;
+              buildingNo?: string | null;
+              flatNo?: string | null;
+              parkingNo?: string | null;
               planStartDate?: string;
               archivedAt?: string | null;
               plan?: string;
@@ -294,6 +314,9 @@ export function DashboardController() {
               name: customer.name,
               phone: customer.phone,
               plate: customer.plateNumber,
+              buildingNo: customer.buildingNo ?? "",
+              flatNo: customer.flatNo ?? "",
+              parkingNo: customer.parkingNo ?? "",
               plan: customer.plan ?? "No plan",
               planStartDate: customer.planStartDate?.slice(0, 10) ?? "",
               archivedAt: customer.archivedAt,
@@ -703,6 +726,9 @@ export function DashboardController() {
             name: customer.name,
             phone: customer.phone,
             plate: customer.plate,
+            buildingNo: customer.buildingNo,
+            flatNo: customer.flatNo,
+            parkingNo: customer.parkingNo,
             plan: customer.plan,
             planStartDate: customer.planStartDate,
             amount: customer.amount,
@@ -714,6 +740,9 @@ export function DashboardController() {
             name: "",
             phone: "971",
             plate: "",
+            buildingNo: "",
+            flatNo: "",
+            parkingNo: "",
             plan: "Basic",
             planStartDate: new Date().toISOString().slice(0, 10),
             amount: plans[0]?.price ?? 0,
@@ -742,6 +771,9 @@ export function DashboardController() {
           phone: customerForm.phone,
           email: "",
           plateNumber: customerForm.plate,
+          buildingNo: customerForm.buildingNo,
+          flatNo: customerForm.flatNo,
+          parkingNo: customerForm.parkingNo,
           planId: selectedPlan.id,
           planStartDate: customerForm.planStartDate,
           agreedPrice: customerForm.amount,
@@ -1365,6 +1397,36 @@ export function DashboardController() {
                 />
               </label>
               <label>
+                <span>Building number (optional)</span>
+                <input
+                  value={customerForm.buildingNo}
+                  onChange={(event) =>
+                    setCustomerForm({ ...customerForm, buildingNo: event.target.value })
+                  }
+                  placeholder="e.g. SA MAR"
+                />
+              </label>
+              <label>
+                <span>Flat number (optional)</span>
+                <input
+                  value={customerForm.flatNo}
+                  onChange={(event) =>
+                    setCustomerForm({ ...customerForm, flatNo: event.target.value })
+                  }
+                  placeholder="e.g. 8046"
+                />
+              </label>
+              <label>
+                <span>Parking number (optional)</span>
+                <input
+                  value={customerForm.parkingNo}
+                  onChange={(event) =>
+                    setCustomerForm({ ...customerForm, parkingNo: event.target.value })
+                  }
+                  placeholder="e.g. 32"
+                />
+              </label>
+              <label>
                 <span>Subscription plan</span>
                 <select
                   value={customerForm.plan}
@@ -1712,6 +1774,8 @@ export function DashboardController() {
                   <strong>{settings.companyName.toUpperCase()}</strong>
                   <small>
                     {settings.address}
+                    <br />
+                    {settings.phone} · {settings.email}
                     {settings.trn ? ` · TRN ${settings.trn}` : ""}
                   </small>
                 </div>
@@ -1725,6 +1789,18 @@ export function DashboardController() {
                     {active.phone}
                     <br />
                     {active.plate}
+                    {(active.buildingNo || active.flatNo || active.parkingNo) && (
+                      <>
+                        <br />
+                        {[
+                          active.buildingNo ? `Building ${active.buildingNo}` : "",
+                          active.flatNo ? `Flat ${active.flatNo}` : "",
+                          active.parkingNo ? `Parking ${active.parkingNo}` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </>
+                    )}
                   </p>
                 </div>
                 <div>

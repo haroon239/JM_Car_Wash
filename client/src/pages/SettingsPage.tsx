@@ -39,6 +39,25 @@ export function SettingsPage({ settings, isSaving, onChange, onSave }: Props) {
           />
         </label>
         <label>
+          <span>Company mobile</span>
+          <input
+            required
+            value={settings.phone}
+            onChange={(e) => field("phone", e.target.value)}
+            placeholder="+971 52 8843039"
+          />
+        </label>
+        <label>
+          <span>Company email</span>
+          <input
+            required
+            type="email"
+            value={settings.email}
+            onChange={(e) => field("email", e.target.value)}
+            placeholder="jmcwashandcleaning@gmail.com"
+          />
+        </label>
+        <label>
           <span>Business address</span>
           <input
             required
