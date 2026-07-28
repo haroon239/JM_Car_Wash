@@ -35,10 +35,12 @@ export function PageHeader({
   section,
   onAddCustomer,
   onAddPlan,
+  hidePrimaryAction = false,
 }: {
   section: Section;
   onAddCustomer: () => void;
   onAddPlan: () => void;
+  hidePrimaryAction?: boolean;
 }) {
   const item = copy[section];
   return (
@@ -50,9 +52,11 @@ export function PageHeader({
       </div>
       <div className="header-actions">
         <button className="icon-button">◉</button>
-        <button className="primary" onClick={section === "plans" ? onAddPlan : onAddCustomer}>
-          ＋ Add {section === "plans" ? "plan" : "customer"}
-        </button>
+        {!hidePrimaryAction && (
+          <button className="primary" onClick={section === "plans" ? onAddPlan : onAddCustomer}>
+            ＋ Add {section === "plans" ? "plan" : "customer"}
+          </button>
+        )}
       </div>
     </header>
   );

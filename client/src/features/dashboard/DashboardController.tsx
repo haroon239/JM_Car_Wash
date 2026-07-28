@@ -966,6 +966,7 @@ export function DashboardController() {
             setShowPlans(true);
             openPlanForm();
           }}
+          hidePrimaryAction={section === "customers" && Boolean(profileCustomer)}
         />
         <Notice
           message={notice.message}
