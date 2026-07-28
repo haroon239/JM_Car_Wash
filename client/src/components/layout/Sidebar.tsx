@@ -1,10 +1,10 @@
-import type { Customer, Section } from "../../types/domain";
+import type { Section } from "../../types/domain";
 type Props = {
   section: Section;
   onNavigate: (section: Section) => void;
   activeCustomers: number;
-  customers: Customer[];
   actionCount: number;
+  invoiceActionCount: number;
 };
 const items: [Section, string, string][] = [
   ["overview", "⌂", "Overview"],
@@ -14,7 +14,13 @@ const items: [Section, string, string][] = [
   ["payments", "◷", "Payment history"],
   ["settings", "⚙", "Settings"],
 ];
-export function Sidebar({ section, onNavigate, activeCustomers, customers, actionCount }: Props) {
+export function Sidebar({
+  section,
+  onNavigate,
+  activeCustomers,
+  actionCount,
+  invoiceActionCount,
+}: Props) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -34,7 +40,7 @@ export function Sidebar({ section, onNavigate, activeCustomers, customers, actio
             <span>{icon}</span>
             {label}
             {id === "customers" && <b>{activeCustomers}</b>}
-            {id === "invoices" && <b>{customers.filter((c) => c.status !== "Paid").length}</b>}
+            {id === "invoices" && invoiceActionCount > 0 && <b>{invoiceActionCount}</b>}
             {id === "overview" && actionCount > 0 && <b className="alert-count">{actionCount}</b>}
           </button>
         ))}

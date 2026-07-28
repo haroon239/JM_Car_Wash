@@ -446,15 +446,20 @@ export function DashboardController() {
     [customers],
   );
   const customerActions = useMemo(() => {
-    const latestInvoiceByCustomer = new Map<number, Invoice>();
+    const actionableInvoiceByCustomer = new Map<number, Invoice>();
+    const priority: Record<string, number> = { overdue: 1, pending: 2, sent: 3 };
     for (const invoice of invoices) {
-      if (!latestInvoiceByCustomer.has(invoice.customerId))
-        latestInvoiceByCustomer.set(invoice.customerId, invoice);
+      const status = invoice.status.toLowerCase();
+      if (!(status in priority)) continue;
+      const current = actionableInvoiceByCustomer.get(invoice.customerId);
+      if (!current || priority[status] < priority[current.status.toLowerCase()]) {
+        actionableInvoiceByCustomer.set(invoice.customerId, invoice);
+      }
     }
 
     return activeCustomers
       .map((customer) => {
-        const invoice = latestInvoiceByCustomer.get(customer.id);
+        const invoice = actionableInvoiceByCustomer.get(customer.id);
         const invoiceStatus = invoice?.status.toLowerCase();
         let action: CustomerAction | null = null;
 
@@ -488,12 +493,14 @@ export function DashboardController() {
       expiring: customerActions.filter((item) =>
         ["expiring", "expires-today", "expired"].includes(item.action.kind),
       ).length,
-      ready: customerActions.filter((item) => item.action.kind === "invoice-ready").length,
-      overdue: customerActions.filter((item) => item.action.kind === "payment-overdue").length,
-      pending: customerActions.filter((item) => item.action.kind === "payment-pending").length,
+      ready: invoices.filter((invoice) => invoice.status.toLowerCase() === "pending").length,
+      overdue: invoices.filter((invoice) => invoice.status.toLowerCase() === "overdue").length,
+      pending: invoices.filter((invoice) => invoice.status.toLowerCase() === "sent").length,
     }),
-    [customerActions],
+    [customerActions, invoices],
   );
+  const invoiceActionCount = actionCounts.ready + actionCounts.pending + actionCounts.overdue;
+  const totalActionCount = actionCounts.expiring + invoiceActionCount;
   const filtered = useMemo(
     () =>
       activeCustomers.filter((customer) =>
@@ -991,8 +998,8 @@ export function DashboardController() {
         section={section}
         onNavigate={setSection}
         activeCustomers={activeCustomers.length}
-        customers={customers}
-        actionCount={customerActions.length}
+        actionCount={totalActionCount}
+        invoiceActionCount={invoiceActionCount}
       />
 
       <section className={`content section-${section}`}>
@@ -1235,7 +1242,7 @@ export function DashboardController() {
           />
         )}
 
-        {section === "overview" && customerActions.length > 0 && (
+        {section === "overview" && totalActionCount > 0 && (
           <section className="action-required">
             <div className="action-required-icon">!</div>
             <div>
@@ -1245,7 +1252,9 @@ export function DashboardController() {
                 {actionCounts.pending} awaiting payment · {actionCounts.overdue} overdue
               </p>
             </div>
-            <button onClick={() => setSection("customers")}>Review customers</button>
+            <button onClick={() => setSection(invoiceActionCount > 0 ? "invoices" : "customers")}>
+              {invoiceActionCount > 0 ? "Review invoices" : "Review customers"}
+            </button>
           </section>
         )}
 
