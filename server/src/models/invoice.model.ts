@@ -6,13 +6,15 @@ const uaeToday = "(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dubai')::DATE";
 const invoiceFields = `i.id,i.invoice_number AS "invoiceNumber",
   i.customer_id AS "customerId",i.subtotal,i.vat_amount AS "vatAmount",i.total,
   i.status,i.issue_date AS "issueDate",i.due_date AS "dueDate",i.sent_at AS "sentAt",
+  i.billing_period AS "billingPeriodStart",
   i.description,i.revision_number AS "revisionNumber"`;
 
 export async function findInvoices() {
   return (
     await requireDatabase().query(`
       SELECT ${invoiceFields},c.name AS "customerName",c.phone,
-        c.plate_number AS "plateNumber",p.name AS "planName"
+        c.plate_number AS "plateNumber",c.billing_type AS "billingType",
+        p.name AS "planName"
       FROM invoices i
       JOIN customers c ON c.id=i.customer_id
       LEFT JOIN plans p ON p.id=c.plan_id
@@ -32,7 +34,7 @@ export async function createInvoice(customerId: number, options: InvoiceGenerati
   try {
     await client.query("BEGIN");
     const customer = await client.query(
-      `SELECT c.id,c.name,c.phone,c.plate_number,c.agreed_price,
+      `SELECT c.id,c.name,c.phone,c.plate_number,c.agreed_price,c.billing_type,
         p.name AS plan_name
        FROM customers c
        JOIN plans p ON p.id=c.plan_id
@@ -100,7 +102,8 @@ export async function createInvoice(customerId: number, options: InvoiceGenerati
       `UPDATE invoices SET invoice_number=$1 WHERE id=$2
        RETURNING id,invoice_number AS "invoiceNumber",customer_id AS "customerId",
          subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",
-         due_date AS "dueDate",sent_at AS "sentAt",description,
+         due_date AS "dueDate",sent_at AS "sentAt",
+         billing_period AS "billingPeriodStart",description,
          revision_number AS "revisionNumber"`,
       [invoiceNumber, id],
     );
@@ -130,6 +133,7 @@ function invoiceWithCustomer(
     phone: customer.phone,
     plateNumber: customer.plate_number,
     planName: customer.plan_name,
+    billingType: customer.billing_type,
     wasExisting,
   };
 }

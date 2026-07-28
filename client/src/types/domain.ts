@@ -44,6 +44,8 @@ export type Invoice = {
   status: string;
   issueDate: string;
   dueDate: string;
+  billingPeriodStart: string;
+  billingType: Customer["billingType"];
   sentAt?: string | null;
   description: string;
   revisionNumber: number;

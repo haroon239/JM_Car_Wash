@@ -50,6 +50,40 @@ function formatDueDate(date?: string | null) {
   }).format(new Date(date));
 }
 
+function formatBillingPeriod(invoice: Invoice) {
+  const startValue = invoice.billingPeriodStart || invoice.issueDate;
+  if (!startValue || invoice.billingType === "manual" || invoice.billingType === "one_time") {
+    return null;
+  }
+
+  const start = new Date(`${String(startValue).slice(0, 10)}T00:00:00Z`);
+  const end = new Date(start);
+  if (invoice.billingType === "weekly") {
+    end.setUTCDate(end.getUTCDate() + 6);
+  } else {
+    const nextMonth = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+    const lastDay = new Date(
+      Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + 1, 0),
+    ).getUTCDate();
+    end.setTime(
+      Date.UTC(
+        nextMonth.getUTCFullYear(),
+        nextMonth.getUTCMonth(),
+        Math.min(start.getUTCDate(), lastDay),
+      ),
+    );
+    end.setUTCDate(end.getUTCDate() - 1);
+  }
+
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  return `${formatter.format(start)} – ${formatter.format(end)}`;
+}
+
 function calculateNextInvoiceDate(startDate: string, billingType: Customer["billingType"]) {
   if (!startDate || billingType === "manual") return "";
   const date = new Date(`${startDate}T00:00:00`);
@@ -1887,6 +1921,12 @@ export function DashboardController() {
                         : "—"}
                     </b>
                   </p>
+                  {activeInvoice && formatBillingPeriod(activeInvoice) && (
+                    <p>
+                      <span>Service period</span>
+                      <b>{formatBillingPeriod(activeInvoice)}</b>
+                    </p>
+                  )}
                 </div>
               </div>
               <table>
@@ -1903,7 +1943,11 @@ export function DashboardController() {
                       <strong>
                         {activeInvoice?.description ?? `${active.plan} Car Wash Plan`}
                       </strong>
-                      <small>Monthly subscription</small>
+                      <small>
+                        {activeInvoice?.billingType
+                          ? `${activeInvoice.billingType.replace("_", " ")} billing`
+                          : `${active.billingType.replace("_", " ")} billing`}
+                      </small>
                     </td>
                     <td>1</td>
                     <td>AED {(activeInvoice?.total ?? active.amount).toFixed(2)}</td>
