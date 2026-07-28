@@ -23,7 +23,15 @@ export async function findCustomers(view: "active" | "archived" | "all") {
       SELECT i.status, i.due_date
       FROM invoices i
       WHERE i.customer_id = c.id
-      ORDER BY i.billing_period DESC, i.id DESC
+      ORDER BY
+        CASE i.status
+          WHEN 'overdue' THEN 1
+          WHEN 'pending' THEN 2
+          WHEN 'sent' THEN 3
+          ELSE 4
+        END,
+        i.billing_period DESC,
+        i.id DESC
       LIMIT 1
     ) current_invoice ON TRUE
     WHERE ${condition} ORDER BY c.created_at DESC
