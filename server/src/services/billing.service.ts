@@ -1,31 +1,56 @@
 import {
   createInvoice,
   advanceCustomerBilling,
+  findCustomerBillingSchedule,
   findCustomersDueForInvoice,
   markPastDueInvoicesOverdue,
 } from "../models/invoice.model.js";
 
 const DUBAI_OFFSET_MS = 4 * 60 * 60 * 1000;
 const RUN_MINUTE_AFTER_MIDNIGHT = 5;
+const MAX_CATCH_UP_CYCLES = 120;
 
 export async function runBillingMaintenance() {
-  const overdueCount = await markPastDueInvoicesOverdue();
-  const customers = await findCustomersDueForInvoice();
-
   let generatedCount = 0;
-  for (const customer of customers) {
-    const invoice = await createInvoice(Number(customer.id), {
-      issueDate: customer.invoiceDate,
-      billingPeriod: customer.invoiceDate,
-      source: "automatic",
-    });
-    if (!invoice.wasExisting) generatedCount += 1;
-    await advanceCustomerBilling(Number(customer.id), customer.billingType);
+  for (let cycle = 0; cycle < MAX_CATCH_UP_CYCLES; cycle += 1) {
+    const customers = await findCustomersDueForInvoice();
+    if (!customers.length) break;
+
+    for (const customer of customers) {
+      const invoice = await createInvoice(Number(customer.id), {
+        issueDate: customer.invoiceDate,
+        billingPeriod: customer.invoiceDate,
+        source: "automatic",
+      });
+      if (!invoice.wasExisting) generatedCount += 1;
+      await advanceCustomerBilling(Number(customer.id), customer.billingType);
+    }
   }
 
+  const overdueCount = await markPastDueInvoicesOverdue();
   console.log(
     `Billing maintenance completed: ${generatedCount} invoice(s) generated, ${overdueCount ?? 0} marked overdue.`,
   );
+}
+
+export async function createNextCustomerInvoice(customerId: number) {
+  const schedule = await findCustomerBillingSchedule(customerId);
+  if (!schedule) throw Object.assign(new Error("Active customer not found"), { status: 404 });
+
+  if (
+    (schedule.billingType !== "monthly" && schedule.billingType !== "weekly") ||
+    !schedule.invoiceDate
+  ) {
+    return createInvoice(customerId);
+  }
+
+  const invoice = await createInvoice(customerId, {
+    issueDate: schedule.invoiceDate,
+    billingPeriod: schedule.invoiceDate,
+    source: "manual",
+  });
+  await advanceCustomerBilling(customerId, schedule.billingType);
+  return invoice;
 }
 
 function millisecondsUntilNextDubaiRun() {

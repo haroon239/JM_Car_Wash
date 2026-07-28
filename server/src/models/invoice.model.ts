@@ -29,6 +29,22 @@ type InvoiceGenerationOptions = {
   source?: "manual" | "automatic";
 };
 
+export async function findCustomerBillingSchedule(customerId: number) {
+  return (
+    await requireDatabase().query(
+      `SELECT next_invoice_date AS "invoiceDate",billing_type AS "billingType"
+       FROM customers
+       WHERE id=$1 AND deleted_at IS NULL`,
+      [customerId],
+    )
+  ).rows[0] as
+    | {
+        invoiceDate: string | null;
+        billingType: "monthly" | "weekly" | "one_time" | "manual";
+      }
+    | undefined;
+}
+
 export async function createInvoice(customerId: number, options: InvoiceGenerationOptions = {}) {
   const client = await requireDatabase().connect();
   try {

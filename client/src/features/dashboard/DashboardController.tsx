@@ -669,6 +669,9 @@ export function DashboardController() {
       const updatedCustomer = {
         ...customer,
         due: formatDueDate(invoice.dueDate),
+        nextInvoiceDate: row.nextInvoiceDate
+          ? String(row.nextInvoiceDate).slice(0, 10)
+          : customer.nextInvoiceDate,
         status: normalizeInvoiceStatus(invoice.status),
       };
       setCustomers((current) =>

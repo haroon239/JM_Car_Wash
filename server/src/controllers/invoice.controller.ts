@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import * as invoiceModel from "../models/invoice.model.js";
+import { createNextCustomerInvoice } from "../services/billing.service.js";
 import { idSchema } from "../validators/customer.schema.js";
 import { invoiceEditSchema, invoiceStatusSchema } from "../validators/payment.schema.js";
 
@@ -8,8 +9,11 @@ export async function listInvoices(_request: Request, response: Response) {
 }
 export async function createInvoice(request: Request, response: Response) {
   const customerId = idSchema.parse(request.body.customerId);
-  const invoice = await invoiceModel.createInvoice(customerId);
-  response.status(invoice.wasExisting ? 200 : 201).json(invoice);
+  const invoice = await createNextCustomerInvoice(customerId);
+  const schedule = await invoiceModel.findCustomerBillingSchedule(customerId);
+  response
+    .status(invoice.wasExisting ? 200 : 201)
+    .json({ ...invoice, nextInvoiceDate: schedule?.invoiceDate ?? null });
 }
 export async function updateInvoiceStatus(request: Request, response: Response) {
   const result = await invoiceModel.updateInvoiceStatus(
