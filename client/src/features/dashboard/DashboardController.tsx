@@ -214,8 +214,8 @@ export function DashboardController() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [settings, setSettings] = useState<CompanySettings>({
     companyName: "JAHAN MUHAMMAD FOR CAR WASHING & CLEANING CO.",
-    phone: "+971 52 8843039",
-    email: "jmcwashandcleaning@gmail.com",
+    phone: "+971 52 8843059",
+    email: "jmcarwashandcleaning@gmail.com",
     trn: "",
     address: "United Arab Emirates",
     invoicePrefix: "JMCW",

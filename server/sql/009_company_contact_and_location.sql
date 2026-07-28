@@ -4,8 +4,8 @@ ALTER TABLE company_settings
 
 UPDATE company_settings
 SET company_name = 'JAHAN MUHAMMAD FOR CAR WASHING & CLEANING CO.',
-    phone = COALESCE(phone, '+971 52 8843039'),
-    email = COALESCE(email, 'jmcwashandcleaning@gmail.com'),
+    phone = COALESCE(phone, '+971 52 8843059'),
+    email = COALESCE(email, 'jmcarwashandcleaning@gmail.com'),
     updated_at = NOW()
 WHERE id = 1;
 

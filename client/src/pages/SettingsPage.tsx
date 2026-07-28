@@ -44,7 +44,7 @@ export function SettingsPage({ settings, isSaving, onChange, onSave }: Props) {
             required
             value={settings.phone}
             onChange={(e) => field("phone", e.target.value)}
-            placeholder="+971 52 8843039"
+            placeholder="+971 52 8843059"
           />
         </label>
         <label>
@@ -54,7 +54,7 @@ export function SettingsPage({ settings, isSaving, onChange, onSave }: Props) {
             type="email"
             value={settings.email}
             onChange={(e) => field("email", e.target.value)}
-            placeholder="jmcwashandcleaning@gmail.com"
+            placeholder="jmcarwashandcleaning@gmail.com"
           />
         </label>
         <label>
