@@ -34,12 +34,10 @@ export function CustomerProfilePage({
   const [tab, setTab] = useState<Tab>("overview");
   const totals = useMemo(() => {
     const invoiced = invoices.reduce((sum, invoice) => sum + invoice.total, 0);
-    const paid = invoices
-      .filter((invoice) => invoice.status === "paid")
-      .reduce((sum, invoice) => sum + invoice.total, 0);
+    const paid = invoices.reduce((sum, invoice) => sum + invoice.paidAmount, 0);
     const overdue = invoices
-      .filter((invoice) => invoice.status === "overdue")
-      .reduce((sum, invoice) => sum + invoice.total, 0);
+      .filter((invoice) => ["overdue", "partially_overdue"].includes(invoice.status))
+      .reduce((sum, invoice) => sum + invoice.balance, 0);
     return { invoiced, paid, outstanding: invoiced - paid, overdue };
   }, [invoices]);
   const latestInvoice = invoices[0];
@@ -226,7 +224,7 @@ export function CustomerProfilePage({
                         </button>
                         {invoice.status !== "paid" && (
                           <button className="paid-button" onClick={() => onMarkPaid(invoice)}>
-                            Mark paid
+                            Record payment
                           </button>
                         )}
                       </div>
@@ -257,6 +255,7 @@ export function CustomerProfilePage({
                   <th>Amount</th>
                   <th>Method</th>
                   <th>Reference</th>
+                  <th>Note</th>
                 </tr>
               </thead>
               <tbody>
@@ -269,6 +268,7 @@ export function CustomerProfilePage({
                     </td>
                     <td>{payment.method.replace("_", " ")}</td>
                     <td>{payment.reference || "—"}</td>
+                    <td>{payment.note || "—"}</td>
                   </tr>
                 ))}
               </tbody>

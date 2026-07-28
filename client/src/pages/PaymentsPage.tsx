@@ -14,7 +14,7 @@ export function PaymentsPage({ payments, invoices }: { payments: Payment[]; invo
             AED{" "}
             {invoices
               .filter((i) => i.status !== "paid")
-              .reduce((s, i) => s + i.total, 0)
+              .reduce((s, i) => s + i.balance, 0)
               .toFixed(2)}
           </strong>
           <p>Pending, sent and overdue invoices</p>
@@ -36,6 +36,7 @@ export function PaymentsPage({ payments, invoices }: { payments: Payment[]; invo
                 <th>Invoice</th>
                 <th>Method</th>
                 <th>Reference</th>
+                <th>Note</th>
                 <th>Amount</th>
               </tr>
             </thead>
@@ -56,6 +57,7 @@ export function PaymentsPage({ payments, invoices }: { payments: Payment[]; invo
                     <span className="method-badge">{p.method.replace("_", " ")}</span>
                   </td>
                   <td>{p.reference || "—"}</td>
+                  <td>{p.note || "—"}</td>
                   <td>
                     <strong>AED {p.amount.toFixed(2)}</strong>
                   </td>

@@ -26,8 +26,10 @@ export async function findCustomers(view: "active" | "archived" | "all") {
       ORDER BY
         CASE i.status
           WHEN 'overdue' THEN 1
+          WHEN 'partially_overdue' THEN 1
           WHEN 'pending' THEN 2
           WHEN 'sent' THEN 3
+          WHEN 'partially_paid' THEN 3
           ELSE 4
         END,
         i.billing_period DESC,

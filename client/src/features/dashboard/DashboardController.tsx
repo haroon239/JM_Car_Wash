@@ -34,7 +34,9 @@ function normalizeInvoiceStatus(status?: string | null): Customer["status"] {
     case "sent":
       return "Sent";
     case "overdue":
+    case "partially_overdue":
       return "Overdue";
+    case "partially_paid":
     default:
       return "Pending";
   }
@@ -247,11 +249,19 @@ export function DashboardController() {
   const [profileActivities, setProfileActivities] = useState<CustomerActivity[]>([]);
   const [invoiceEditForm, setInvoiceEditForm] = useState({
     description: "",
+    customerNote: "",
     total: "",
     issueDate: "",
     dueDate: "",
     reason: "",
     applyToFuture: false,
+  });
+  const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
+  const [paymentForm, setPaymentForm] = useState({
+    amount: "",
+    method: "cash",
+    reference: "",
+    note: "",
   });
   const [payments, setPayments] = useState<Payment[]>([]);
   const [settings, setSettings] = useState<CompanySettings>({
@@ -326,6 +336,9 @@ export function DashboardController() {
             id: Number(invoice.id),
             customerId: Number(invoice.customerId),
             total: Number(invoice.total),
+            paidAmount: Number(invoice.paidAmount ?? 0),
+            balance: Number(invoice.balance ?? invoice.total),
+            customerNote: String(invoice.customerNote ?? ""),
             description: String(invoice.description ?? "Car Wash Service"),
             revisionNumber: Number(invoice.revisionNumber ?? 0),
           })) as Invoice[],
@@ -336,6 +349,7 @@ export function DashboardController() {
             id: Number(payment.id),
             invoiceId: Number(payment.invoiceId),
             amount: Number(payment.amount),
+            note: payment.note ? String(payment.note) : null,
           })) as Payment[],
         );
         setCustomers(
@@ -447,7 +461,13 @@ export function DashboardController() {
   );
   const customerActions = useMemo(() => {
     const actionableInvoiceByCustomer = new Map<number, Invoice>();
-    const priority: Record<string, number> = { overdue: 1, pending: 2, sent: 3 };
+    const priority: Record<string, number> = {
+      overdue: 1,
+      partially_overdue: 1,
+      pending: 2,
+      sent: 3,
+      partially_paid: 3,
+    };
     for (const invoice of invoices) {
       const status = invoice.status.toLowerCase();
       if (!(status in priority)) continue;
@@ -463,11 +483,11 @@ export function DashboardController() {
         const invoiceStatus = invoice?.status.toLowerCase();
         let action: CustomerAction | null = null;
 
-        if (invoiceStatus === "overdue") {
+        if (invoiceStatus === "overdue" || invoiceStatus === "partially_overdue") {
           action = { kind: "payment-overdue", label: "Payment overdue", invoice };
         } else if (invoiceStatus === "pending") {
           action = { kind: "invoice-ready", label: "Invoice ready", invoice };
-        } else if (invoiceStatus === "sent") {
+        } else if (invoiceStatus === "sent" || invoiceStatus === "partially_paid") {
           action = { kind: "payment-pending", label: "Payment pending", invoice };
         } else if (customer.nextInvoiceDate) {
           const days = daysFromDubaiToday(customer.nextInvoiceDate);
@@ -494,8 +514,12 @@ export function DashboardController() {
         ["expiring", "expires-today", "expired"].includes(item.action.kind),
       ).length,
       ready: invoices.filter((invoice) => invoice.status.toLowerCase() === "pending").length,
-      overdue: invoices.filter((invoice) => invoice.status.toLowerCase() === "overdue").length,
-      pending: invoices.filter((invoice) => invoice.status.toLowerCase() === "sent").length,
+      overdue: invoices.filter((invoice) =>
+        ["overdue", "partially_overdue"].includes(invoice.status.toLowerCase()),
+      ).length,
+      pending: invoices.filter((invoice) =>
+        ["sent", "partially_paid"].includes(invoice.status.toLowerCase()),
+      ).length,
     }),
     [customerActions, invoices],
   );
@@ -606,7 +630,7 @@ export function DashboardController() {
 
   async function toggleSent(customer: Customer) {
     if (!activeInvoice) return;
-    const isUnsend = activeInvoice.status.toLowerCase() === "sent";
+    const isUnsend = Boolean(activeInvoice.sentAt);
     const nextStatus = isUnsend ? "pending" : "sent";
     try {
       const response = await fetch(`/api/invoices/${activeInvoice.id}/status`, {
@@ -615,12 +639,14 @@ export function DashboardController() {
         body: JSON.stringify({ status: nextStatus }),
       });
       if (!response.ok) throw new Error("Unable to update invoice status");
+      const row = await response.json();
+      const actualStatus = String(row.status);
       setInvoices((current) =>
         current.map((invoice) =>
           invoice.id === activeInvoice.id
             ? {
                 ...invoice,
-                status: nextStatus,
+                status: actualStatus,
                 sentAt: isUnsend ? null : new Date().toISOString(),
               }
             : invoice,
@@ -628,13 +654,13 @@ export function DashboardController() {
       );
       setActiveInvoice({
         ...activeInvoice,
-        status: nextStatus,
+        status: actualStatus,
         sentAt: isUnsend ? null : new Date().toISOString(),
       });
       setCustomers((current) =>
         current.map((item) =>
           item.id === customer.id
-            ? { ...item, status: isUnsend ? ("Pending" as const) : ("Sent" as const) }
+            ? { ...item, status: normalizeInvoiceStatus(actualStatus) }
             : item,
         ),
       );
@@ -664,6 +690,9 @@ export function DashboardController() {
         id: Number(row.id),
         customerId: Number(row.customerId),
         total: Number(row.total),
+        paidAmount: Number(row.paidAmount ?? 0),
+        balance: Number(row.balance ?? row.total),
+        customerNote: String(row.customerNote ?? ""),
         description: String(row.description ?? `${customer.plan} Car Wash Plan`),
         revisionNumber: Number(row.revisionNumber ?? 0),
       };
@@ -703,6 +732,7 @@ export function DashboardController() {
     setEditingInvoice(invoice);
     setInvoiceEditForm({
       description: invoice.description,
+      customerNote: invoice.customerNote ?? "",
       total: String(invoice.total),
       issueDate: String(invoice.issueDate).slice(0, 10),
       dueDate: String(invoice.dueDate).slice(0, 10),
@@ -715,7 +745,7 @@ export function DashboardController() {
     event.preventDefault();
     if (!editingInvoice) return;
     if (
-      editingInvoice.status === "sent" &&
+      editingInvoice.sentAt &&
       !window.confirm("This invoice was already sent. Save the revision and mark it pending?")
     )
       return;
@@ -736,6 +766,8 @@ export function DashboardController() {
         ...editingInvoice,
         ...updated,
         total: Number(updated.total),
+        paidAmount: Number(updated.paidAmount ?? editingInvoice.paidAmount),
+        balance: Number(updated.balance ?? editingInvoice.balance),
         revisionNumber: Number(updated.revisionNumber),
       };
       setInvoices((current) =>
@@ -764,17 +796,38 @@ export function DashboardController() {
     }
   }
 
-  async function recordPayment(invoice: Invoice) {
-    const method = window.prompt("Payment method: cash, card, bank_transfer, or other", "cash");
-    if (!method) return;
-    if (!["cash", "card", "bank_transfer", "other"].includes(method))
-      return setNotice("Invalid payment method.", "error");
-    const reference = window.prompt("Payment reference (optional)", "") ?? "";
+  function recordPayment(invoice: Invoice) {
+    setPaymentInvoice(invoice);
+    setPaymentForm({
+      amount: invoice.balance.toFixed(2),
+      method: "cash",
+      reference: "",
+      note: "",
+    });
+  }
+
+  async function submitPayment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!paymentInvoice) return;
+    const amount = Number(paymentForm.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > paymentInvoice.balance) {
+      return setNotice(
+        `Enter an amount between AED 0.01 and AED ${paymentInvoice.balance.toFixed(2)}.`,
+        "error",
+      );
+    }
+    setIsSaving(true);
     try {
       const response = await fetch("/api/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId: invoice.id, method, reference }),
+        body: JSON.stringify({
+          invoiceId: paymentInvoice.id,
+          amount,
+          method: paymentForm.method,
+          reference: paymentForm.reference,
+          note: paymentForm.note,
+        }),
       });
       if (!response.ok)
         throw new Error((await response.json()).message ?? "Unable to record payment");
@@ -784,22 +837,42 @@ export function DashboardController() {
         id: Number(row.id),
         invoiceId: Number(row.invoiceId),
         amount: Number(row.amount),
-        invoiceNumber: invoice.invoiceNumber,
-        customerName: invoice.customerName,
+        note: row.note ? String(row.note) : null,
+        invoiceNumber: paymentInvoice.invoiceNumber,
+        customerName: paymentInvoice.customerName,
       };
       setPayments((current) => [payment, ...current]);
+      const nextInvoice = {
+        ...paymentInvoice,
+        status: String(row.invoiceStatus),
+        paidAmount: Number(row.paidAmount),
+        balance: Number(row.balance),
+        customerNote: String(row.customerNote ?? paymentInvoice.customerNote),
+      };
       setInvoices((current) =>
-        current.map((item) => (item.id === invoice.id ? { ...item, status: "paid" } : item)),
+        current.map((item) => (item.id === paymentInvoice.id ? nextInvoice : item)),
       );
-      if (activeInvoice?.id === invoice.id) setActiveInvoice({ ...activeInvoice, status: "paid" });
+      if (activeInvoice?.id === paymentInvoice.id) setActiveInvoice(nextInvoice);
       setCustomers((current) =>
         current.map((customer) =>
-          customer.id === invoice.customerId ? { ...customer, status: "Paid" as const } : customer,
+          customer.id === paymentInvoice.customerId
+            ? {
+                ...customer,
+                status: normalizeInvoiceStatus(String(row.invoiceStatus)),
+              }
+            : customer,
         ),
       );
-      setNotice(`${invoice.invoiceNumber} marked paid via ${method.replace("_", " ")}.`);
+      setPaymentInvoice(null);
+      setNotice(
+        Number(row.balance) <= 0
+          ? `${paymentInvoice.invoiceNumber} is fully paid.`
+          : `AED ${amount.toFixed(2)} recorded. Remaining balance AED ${Number(row.balance).toFixed(2)}.`,
+      );
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Unable to record payment.", "error");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -1288,8 +1361,10 @@ export function DashboardController() {
               <strong>
                 AED{" "}
                 {invoices
-                  .filter((invoice) => ["pending", "sent"].includes(invoice.status))
-                  .reduce((sum, invoice) => sum + invoice.total, 0)
+                  .filter((invoice) =>
+                    ["pending", "sent", "partially_paid"].includes(invoice.status),
+                  )
+                  .reduce((sum, invoice) => sum + invoice.balance, 0)
                   .toFixed(2)}
               </strong>
               <p>{actionCounts.ready + actionCounts.pending} invoices due</p>
@@ -1366,7 +1441,13 @@ export function DashboardController() {
                           <small>{customer.due}</small>
                         </td>
                         <td>
-                          <strong>AED {customer.amount.toFixed(2)}</strong>
+                          <strong>
+                            AED{" "}
+                            {(
+                              customerActionMap.get(customer.id)?.invoice?.balance ??
+                              customer.amount
+                            ).toFixed(2)}
+                          </strong>
                           <small>{customerActionMap.get(customer.id)?.label}</small>
                         </td>
                         <td>
@@ -1814,6 +1895,21 @@ export function DashboardController() {
                   }
                 />
               </label>
+              <label className="full-field">
+                <span>Customer note (printed on invoice)</span>
+                <textarea
+                  maxLength={500}
+                  rows={3}
+                  value={invoiceEditForm.customerNote}
+                  onChange={(event) =>
+                    setInvoiceEditForm({
+                      ...invoiceEditForm,
+                      customerNote: event.target.value,
+                    })
+                  }
+                  placeholder="e.g. AED 50 received. Remaining balance is due by 10 August 2026."
+                />
+              </label>
               <label>
                 <span>Reason for change</span>
                 <input
@@ -1845,6 +1941,84 @@ export function DashboardController() {
                 </button>
                 <button type="submit" className="primary" disabled={isSaving}>
                   {isSaving ? "Saving…" : "Save revision"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {paymentInvoice && (
+        <div className="modal-backdrop" onMouseDown={() => setPaymentInvoice(null)}>
+          <section className="customer-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <span className="ready">RECORD PAYMENT</span>
+                <h2>{paymentInvoice.invoiceNumber}</h2>
+                <p>
+                  Total AED {paymentInvoice.total.toFixed(2)} · Received AED{" "}
+                  {paymentInvoice.paidAmount.toFixed(2)} · Balance AED{" "}
+                  {paymentInvoice.balance.toFixed(2)}
+                </p>
+              </div>
+              <button onClick={() => setPaymentInvoice(null)}>×</button>
+            </div>
+            <form className="customer-form" onSubmit={submitPayment}>
+              <label>
+                <span>Amount received (AED)</span>
+                <input
+                  required
+                  type="number"
+                  min="0.01"
+                  max={paymentInvoice.balance}
+                  step="0.01"
+                  value={paymentForm.amount}
+                  onChange={(event) =>
+                    setPaymentForm({ ...paymentForm, amount: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                <span>Payment method</span>
+                <select
+                  value={paymentForm.method}
+                  onChange={(event) =>
+                    setPaymentForm({ ...paymentForm, method: event.target.value })
+                  }
+                >
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label>
+                <span>Reference (optional)</span>
+                <input
+                  maxLength={100}
+                  value={paymentForm.reference}
+                  onChange={(event) =>
+                    setPaymentForm({ ...paymentForm, reference: event.target.value })
+                  }
+                  placeholder="Transfer or receipt reference"
+                />
+              </label>
+              <label className="full-field">
+                <span>Internal payment note (optional)</span>
+                <textarea
+                  maxLength={300}
+                  rows={3}
+                  value={paymentForm.note}
+                  onChange={(event) => setPaymentForm({ ...paymentForm, note: event.target.value })}
+                  placeholder="e.g. Customer promised remaining amount next week."
+                />
+              </label>
+              <div className="form-actions">
+                <button type="button" className="secondary" onClick={() => setPaymentInvoice(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary" disabled={isSaving}>
+                  {isSaving ? "Saving..." : "Record payment"}
                 </button>
               </div>
             </form>
@@ -1967,11 +2141,28 @@ export function DashboardController() {
                 </tbody>
               </table>
               <div className="totals">
+                {(activeInvoice?.paidAmount ?? 0) > 0 && (
+                  <p>
+                    <span>Paid</span>
+                    <b>AED {(activeInvoice?.paidAmount ?? 0).toFixed(2)}</b>
+                  </p>
+                )}
                 <p className="total">
-                  <span>Total due</span>
-                  <b>AED {(activeInvoice?.total ?? active.amount).toFixed(2)}</b>
+                  <span>
+                    {(activeInvoice?.paidAmount ?? 0) > 0 ? "Remaining balance" : "Total due"}
+                  </span>
+                  <b>
+                    AED{" "}
+                    {(activeInvoice?.balance ?? activeInvoice?.total ?? active.amount).toFixed(2)}
+                  </b>
                 </p>
               </div>
+              {activeInvoice?.customerNote && (
+                <div className="invoice-customer-note">
+                  <strong>NOTE</strong>
+                  <p>{activeInvoice.customerNote}</p>
+                </div>
+              )}
             </div>
             <div className="send-steps">
               <p>
@@ -2003,9 +2194,7 @@ export function DashboardController() {
               </button>
               {activeInvoice?.status.toLowerCase() !== "paid" && (
                 <button className="primary" onClick={() => void toggleSent(active)}>
-                  {activeInvoice?.status.toLowerCase() === "sent"
-                    ? "Mark as unsent"
-                    : "✓ Mark as sent"}
+                  {activeInvoice?.sentAt ? "Mark as unsent" : "✓ Mark as sent"}
                 </button>
               )}
             </div>

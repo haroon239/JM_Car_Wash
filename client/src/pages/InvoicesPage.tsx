@@ -45,6 +45,11 @@ export function InvoicesPage({
                 <td>{new Date(i.dueDate).toLocaleDateString("en-GB")}</td>
                 <td>
                   <strong>AED {i.total.toFixed(2)}</strong>
+                  {i.paidAmount > 0 && (
+                    <small>
+                      Paid {i.paidAmount.toFixed(2)} · Balance {i.balance.toFixed(2)}
+                    </small>
+                  )}
                 </td>
                 <td>
                   <i className={`status ${i.status}`}>{i.status}</i>
@@ -61,7 +66,7 @@ export function InvoicesPage({
                     )}
                     {i.status !== "paid" && (
                       <button className="paid-button" onClick={() => onPaid(i)}>
-                        Mark paid
+                        Record payment
                       </button>
                     )}
                   </div>

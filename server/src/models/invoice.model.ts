@@ -7,7 +7,10 @@ const invoiceFields = `i.id,i.invoice_number AS "invoiceNumber",
   i.customer_id AS "customerId",i.subtotal,i.vat_amount AS "vatAmount",i.total,
   i.status,i.issue_date AS "issueDate",i.due_date AS "dueDate",i.sent_at AS "sentAt",
   i.billing_period AS "billingPeriodStart",
-  i.description,i.revision_number AS "revisionNumber"`;
+  i.description,i.customer_note AS "customerNote",
+  COALESCE((SELECT SUM(pay.amount) FROM payments pay WHERE pay.invoice_id=i.id),0) AS "paidAmount",
+  GREATEST(i.total-COALESCE((SELECT SUM(pay.amount) FROM payments pay WHERE pay.invoice_id=i.id),0),0) AS balance,
+  i.revision_number AS "revisionNumber"`;
 
 export async function findInvoices() {
   return (
@@ -119,7 +122,8 @@ export async function createInvoice(customerId: number, options: InvoiceGenerati
        RETURNING id,invoice_number AS "invoiceNumber",customer_id AS "customerId",
          subtotal,vat_amount AS "vatAmount",total,status,issue_date AS "issueDate",
          due_date AS "dueDate",sent_at AS "sentAt",
-         billing_period AS "billingPeriodStart",description,
+         billing_period AS "billingPeriodStart",description,customer_note AS "customerNote",
+         0::NUMERIC AS "paidAmount",total AS balance,
          revision_number AS "revisionNumber"`,
       [invoiceNumber, id],
     );
@@ -209,8 +213,12 @@ export async function advanceCustomerBilling(
 export async function markPastDueInvoicesOverdue() {
   return (
     await requireDatabase().query(`
-      UPDATE invoices SET status='overdue'
-      WHERE status IN ('pending','sent') AND due_date < ${uaeToday}
+      UPDATE invoices
+      SET status=CASE
+        WHEN status='partially_paid' THEN 'partially_overdue'
+        ELSE 'overdue'
+      END
+      WHERE status IN ('pending','sent','partially_paid') AND due_date < ${uaeToday}
       RETURNING id
     `)
   ).rowCount;
@@ -220,7 +228,17 @@ export async function updateInvoiceStatus(id: number, status: string) {
   const result = (
     await requireDatabase().query(
       `UPDATE invoices
-       SET status=$1::VARCHAR,
+       SET status=CASE
+         WHEN COALESCE(
+           (SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id=invoices.id),
+           0
+         ) > 0
+           THEN CASE
+             WHEN due_date < ${uaeToday} THEN 'partially_overdue'
+             ELSE 'partially_paid'
+           END
+         ELSE $1::VARCHAR
+       END,
          sent_at=CASE
            WHEN $1::VARCHAR='sent' THEN NOW()
            WHEN $1::VARCHAR='pending' THEN NULL
@@ -245,6 +263,7 @@ export async function updateInvoiceStatus(id: number, status: string) {
 
 export type InvoiceEditInput = {
   description: string;
+  customerNote: string;
   total: number;
   issueDate: string;
   dueDate: string;
@@ -256,17 +275,30 @@ export async function editInvoice(id: number, input: InvoiceEditInput) {
   const client = await requireDatabase().connect();
   try {
     await client.query("BEGIN");
-    const current = await client.query("SELECT * FROM invoices WHERE id=$1 FOR UPDATE", [id]);
+    const current = await client.query(
+      `SELECT i.*,
+        COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id=i.id),0) AS paid_amount
+       FROM invoices i WHERE i.id=$1 FOR UPDATE`,
+      [id],
+    );
     if (!current.rowCount) throw Object.assign(new Error("Invoice not found"), { status: 404 });
     if (current.rows[0].status === "paid")
       throw Object.assign(new Error("Paid invoices cannot be edited"), { status: 409 });
+    if (input.total < Number(current.rows[0].paid_amount))
+      throw Object.assign(
+        new Error(
+          `Invoice total cannot be less than the received AED ${Number(current.rows[0].paid_amount).toFixed(2)}`,
+        ),
+        { status: 409 },
+      );
 
     const revisionNumber = Number(current.rows[0].revision_number) + 1;
     await client.query(
       `INSERT INTO invoice_revisions (
         invoice_id,revision_number,old_description,new_description,old_total,new_total,
-        old_issue_date,new_issue_date,old_due_date,new_due_date,reason
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        old_issue_date,new_issue_date,old_due_date,new_due_date,reason,
+        old_customer_note,new_customer_note
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
         id,
         revisionNumber,
@@ -279,18 +311,37 @@ export async function editInvoice(id: number, input: InvoiceEditInput) {
         current.rows[0].due_date,
         input.dueDate,
         input.reason,
+        current.rows[0].customer_note ?? "",
+        input.customerNote,
       ],
     );
     const updated = await client.query(
       `UPDATE invoices
        SET description=$1,subtotal=$2,total=$2,vat_amount=0,vat_rate=0,
-         issue_date=$3,due_date=$4,revision_number=$5,
-         status=CASE WHEN $4::DATE < ${uaeToday} THEN 'overdue' ELSE 'pending' END,
+         issue_date=$3,due_date=$4,customer_note=$5,revision_number=$6,
+         status=CASE
+           WHEN $2 <= $8 THEN 'paid'
+           WHEN $8 > 0 AND $4::DATE < ${uaeToday} THEN 'partially_overdue'
+           WHEN $8 > 0 THEN 'partially_paid'
+           WHEN $4::DATE < ${uaeToday} THEN 'overdue'
+           ELSE 'pending'
+         END,
          sent_at=NULL
-       WHERE id=$6
+       WHERE id=$7
        RETURNING id,description,total,subtotal,status,issue_date AS "issueDate",
-         due_date AS "dueDate",revision_number AS "revisionNumber",sent_at AS "sentAt"`,
-      [input.description, input.total, input.issueDate, input.dueDate, revisionNumber, id],
+         due_date AS "dueDate",customer_note AS "customerNote",
+         revision_number AS "revisionNumber",sent_at AS "sentAt",
+         $8::NUMERIC AS "paidAmount",GREATEST(total-$8,0) AS balance`,
+      [
+        input.description,
+        input.total,
+        input.issueDate,
+        input.dueDate,
+        input.customerNote,
+        revisionNumber,
+        id,
+        Number(current.rows[0].paid_amount),
+      ],
     );
     if (input.applyToFuture) {
       await client.query(

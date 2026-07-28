@@ -46,6 +46,9 @@ export type Invoice = {
   dueDate: string;
   billingPeriodStart: string;
   billingType: Customer["billingType"];
+  customerNote: string;
+  paidAmount: number;
+  balance: number;
   sentAt?: string | null;
   description: string;
   revisionNumber: number;
@@ -58,6 +61,7 @@ export type Payment = {
   amount: number;
   method: string;
   reference?: string | null;
+  note?: string | null;
   paidAt: string;
   recordedBy: string;
 };

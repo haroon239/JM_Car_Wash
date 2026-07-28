@@ -659,6 +659,14 @@ td small {
   background: #fde8e8;
   color: #b44545;
 }
+.status.partially_paid {
+  background: #e8f1fb;
+  color: #3f6f9e;
+}
+.status.partially_overdue {
+  background: #fde8e8;
+  color: #b44545;
+}
 .status.action-expiring {
   background: #fff1cf;
   color: #946200;
@@ -948,6 +956,17 @@ td small {
   padding-top: 12px;
   font-size: 14px;
 }
+.invoice-customer-note {
+  margin-top: 18px;
+  border-left: 3px solid var(--teal);
+  background: #f0f8f7;
+  padding: 10px 12px;
+  font-size: 11px;
+}
+.invoice-customer-note p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
 .send-steps {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1206,7 +1225,8 @@ td small {
   color: #40555e;
 }
 .customer-form input,
-.customer-form select {
+.customer-form select,
+.customer-form textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1214,11 +1234,16 @@ td small {
   outline: none;
   color: var(--ink);
   background: white;
+  resize: vertical;
 }
 .customer-form input:focus,
-.customer-form select:focus {
+.customer-form select:focus,
+.customer-form textarea:focus {
   border-color: #59aaa4;
   box-shadow: 0 0 0 3px #dff3f1;
+}
+.customer-form .full-field {
+  grid-column: span 2;
 }
 .customer-form label small {
   font-size: 9px;
@@ -1259,6 +1284,7 @@ td small {
   .customer-form label,
   .customer-form label:nth-child(1),
   .customer-form label:nth-child(2),
+  .customer-form .full-field,
   .form-actions {
     grid-column: span 1;
   }
