@@ -1,4 +1,5 @@
 import type { Section } from "../../types/domain";
+
 const copy: Record<Section, { eyebrow: string; title: string; subtitle: string }> = {
   overview: {
     eyebrow: "SATURDAY, 18 JULY",
@@ -31,6 +32,7 @@ const copy: Record<Section, { eyebrow: string; title: string; subtitle: string }
     subtitle: "Configure company and invoice information.",
   },
 };
+
 export function PageHeader({
   section,
   onAddCustomer,
@@ -43,6 +45,7 @@ export function PageHeader({
   hidePrimaryAction?: boolean;
 }) {
   const item = copy[section];
+
   return (
     <header>
       <div>
@@ -51,10 +54,9 @@ export function PageHeader({
         <p>{item.subtitle}</p>
       </div>
       <div className="header-actions">
-        <button className="icon-button">◉</button>
         {!hidePrimaryAction && (
           <button className="primary" onClick={section === "plans" ? onAddPlan : onAddCustomer}>
-            ＋ Add {section === "plans" ? "plan" : "customer"}
+            + Add {section === "plans" ? "plan" : "customer"}
           </button>
         )}
       </div>
