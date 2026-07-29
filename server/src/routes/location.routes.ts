@@ -5,3 +5,5 @@ export const locationRouter = Router();
 locationRouter.get("/", controller.listLocations);
 locationRouter.post("/areas", controller.createArea);
 locationRouter.post("/buildings", controller.createBuilding);
+locationRouter.put("/buildings/:id", controller.updateBuilding);
+locationRouter.delete("/buildings/:id", controller.archiveBuilding);

@@ -1018,6 +1018,43 @@ export function DashboardController() {
     }
   }
 
+  async function updateBuilding(buildingId: number, areaId: number, name: string) {
+    try {
+      const response = await fetch(`/api/locations/buildings/${buildingId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ areaId, name: name.trim() }),
+      });
+      if (!response.ok)
+        throw new Error((await response.json()).message ?? "Unable to update building");
+      await reloadLocations();
+      setSelectedAreaId(areaId);
+      setSelectedBuildingId(buildingId);
+      setNotice(`${name.trim()} updated successfully.`);
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Unable to update building.", "error");
+      return false;
+    }
+  }
+
+  async function archiveBuilding(buildingId: number) {
+    try {
+      const response = await fetch(`/api/locations/buildings/${buildingId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok)
+        throw new Error((await response.json()).message ?? "Unable to archive building");
+      setSelectedBuildingId(null);
+      await reloadLocations();
+      setNotice("Building archived. Its historical records remain available.");
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Unable to archive building.", "error");
+      return false;
+    }
+  }
+
   function openCustomerForm(customer?: Customer) {
     const defaultAreaId = selectedAreaId ?? locations[0]?.areaId ?? 0;
     const defaultBuildingId =
@@ -1344,6 +1381,8 @@ export function DashboardController() {
               setSelectedBuildingId(buildingId);
               setSection("customers");
             }}
+            onUpdateBuilding={updateBuilding}
+            onArchiveBuilding={archiveBuilding}
           />
         )}
 

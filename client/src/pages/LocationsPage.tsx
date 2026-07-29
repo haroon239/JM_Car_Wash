@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { LocationSummary } from "../types/domain";
 
 type Props = {
@@ -9,6 +10,8 @@ type Props = {
   onAddArea: () => void;
   onAddBuilding: (areaId: number) => void;
   onUseBuilding: (areaId: number, buildingId: number) => void;
+  onUpdateBuilding: (buildingId: number, areaId: number, name: string) => Promise<boolean>;
+  onArchiveBuilding: (buildingId: number) => Promise<boolean>;
 };
 
 const money = (value: number) => `AED ${value.toFixed(2)}`;
@@ -22,7 +25,13 @@ export function LocationsPage({
   onAddArea,
   onAddBuilding,
   onUseBuilding,
+  onUpdateBuilding,
+  onArchiveBuilding,
 }: Props) {
+  const [showEditBuilding, setShowEditBuilding] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editAreaId, setEditAreaId] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
   const areas = Array.from(
     new Map(locations.map((location) => [location.areaId, location])).values(),
   );
@@ -45,12 +54,24 @@ export function LocationsPage({
               {selectedBuilding.propertyName} · {selectedBuilding.areaName}
             </p>
           </div>
-          <button
-            className="primary"
-            onClick={() => onUseBuilding(selectedBuilding.areaId, selectedBuilding.buildingId)}
-          >
-            Use this building
-          </button>
+          <div className="profile-actions">
+            <button
+              className="secondary"
+              onClick={() => {
+                setEditName(selectedBuilding.buildingName);
+                setEditAreaId(selectedBuilding.areaId);
+                setShowEditBuilding(true);
+              }}
+            >
+              Edit building
+            </button>
+            <button
+              className="primary"
+              onClick={() => onUseBuilding(selectedBuilding.areaId, selectedBuilding.buildingId)}
+            >
+              View customers
+            </button>
+          </div>
         </div>
         <div className="location-kpis">
           <article>
@@ -95,6 +116,100 @@ export function LocationsPage({
             </div>
           </dl>
         </section>
+        {showEditBuilding && (
+          <div className="modal-backdrop" onMouseDown={() => setShowEditBuilding(false)}>
+            <section
+              className="building-edit-modal"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <div className="modal-head">
+                <div>
+                  <span className="ready">BUILDING RECORD</span>
+                  <h2>Edit building</h2>
+                  <p>Update the building name or move it to another area.</p>
+                </div>
+                <button onClick={() => setShowEditBuilding(false)}>×</button>
+              </div>
+              <form
+                className="building-edit-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  setIsSaving(true);
+                  const saved = await onUpdateBuilding(
+                    selectedBuilding.buildingId,
+                    editAreaId,
+                    editName,
+                  );
+                  setIsSaving(false);
+                  if (saved) setShowEditBuilding(false);
+                }}
+              >
+                <label>
+                  <span>Building name</span>
+                  <input
+                    required
+                    minLength={2}
+                    maxLength={120}
+                    value={editName}
+                    onChange={(event) => setEditName(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Area / cluster</span>
+                  <select
+                    required
+                    value={editAreaId}
+                    onChange={(event) => setEditAreaId(Number(event.target.value))}
+                  >
+                    {areas.map((area) => (
+                      <option key={area.areaId} value={area.areaId}>
+                        {area.areaName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="building-edit-warning">
+                  <strong>Safe archive</strong>
+                  <p>
+                    A building can only be archived after all active customers are moved or
+                    archived. Invoice history will remain safe.
+                  </p>
+                </div>
+                <div className="form-actions">
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={isSaving}
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          `Archive ${selectedBuilding.buildingName}? Historical invoices will remain available.`,
+                        )
+                      )
+                        return;
+                      setIsSaving(true);
+                      const archived = await onArchiveBuilding(selectedBuilding.buildingId);
+                      setIsSaving(false);
+                      if (archived) setShowEditBuilding(false);
+                    }}
+                  >
+                    Archive building
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setShowEditBuilding(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button className="primary" type="submit" disabled={isSaving}>
+                    {isSaving ? "Saving…" : "Save changes"}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
       </section>
     );
   }

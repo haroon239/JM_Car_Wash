@@ -71,3 +71,41 @@ export async function createBuilding(areaId: number, name: string) {
     )
   ).rows[0];
 }
+
+export async function updateBuilding(id: number, areaId: number, name: string) {
+  return (
+    await requireDatabase().query(
+      `UPDATE buildings
+       SET area_id=$2,name=$3
+       WHERE id=$1 AND is_active=TRUE
+       RETURNING id,area_id AS "areaId",name`,
+      [id, areaId, name],
+    )
+  ).rows[0];
+}
+
+export async function archiveBuilding(id: number) {
+  const customerCount = Number(
+    (
+      await requireDatabase().query(
+        `SELECT COUNT(*) AS count FROM customers
+         WHERE building_id=$1 AND deleted_at IS NULL`,
+        [id],
+      )
+    ).rows[0].count,
+  );
+  if (customerCount > 0) {
+    const error = new Error(
+      `Move or archive the ${customerCount} active customer${customerCount === 1 ? "" : "s"} before archiving this building.`,
+    ) as Error & { status: number };
+    error.status = 409;
+    throw error;
+  }
+  return (
+    await requireDatabase().query(
+      `UPDATE buildings SET is_active=FALSE
+       WHERE id=$1 AND is_active=TRUE RETURNING id`,
+      [id],
+    )
+  ).rows[0];
+}
