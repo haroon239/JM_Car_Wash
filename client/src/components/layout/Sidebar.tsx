@@ -8,6 +8,7 @@ type Props = {
 };
 const items: [Section, string, string][] = [
   ["overview", "⌂", "Overview"],
+  ["locations", "▦", "Locations"],
   ["customers", "♙", "Customers"],
   ["plans", "◇", "Plans"],
   ["invoices", "▤", "Invoices"],

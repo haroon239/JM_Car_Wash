@@ -111,28 +111,52 @@ export function CustomerProfilePage({
       {tab === "overview" && (
         <div className="profile-overview-grid">
           <section className="panel profile-detail-card">
-            <h3>Contact & vehicle</h3>
+            <h3>Contact & location</h3>
             <dl>
               <div>
                 <dt>WhatsApp</dt>
                 <dd>{customer.phone}</dd>
               </div>
               <div>
-                <dt>Vehicle / plate</dt>
-                <dd>{customer.plate}</dd>
+                <dt>Property</dt>
+                <dd>{customer.propertyName || "—"}</dd>
+              </div>
+              <div>
+                <dt>Area</dt>
+                <dd>{customer.areaName || "—"}</dd>
               </div>
               <div>
                 <dt>Building</dt>
-                <dd>{customer.buildingNo || "—"}</dd>
+                <dd>{customer.buildingName || customer.buildingNo || "—"}</dd>
               </div>
               <div>
                 <dt>Flat</dt>
                 <dd>{customer.flatNo || "—"}</dd>
               </div>
-              <div>
-                <dt>Parking</dt>
-                <dd>{customer.parkingNo || "—"}</dd>
-              </div>
+            </dl>
+          </section>
+          <section className="panel profile-detail-card">
+            <h3>Vehicles ({customer.vehicles?.length || 1})</h3>
+            <dl>
+              {(customer.vehicles?.length
+                ? customer.vehicles
+                : [
+                    {
+                      plateNumber: customer.plate,
+                      makeModel: "",
+                      parkingNumber: customer.parkingNo,
+                    },
+                  ]
+              ).map((vehicle, index) => (
+                <div key={vehicle.id ?? `${vehicle.plateNumber}-${index}`}>
+                  <dt>{index === 0 ? "Primary vehicle" : `Vehicle ${index + 1}`}</dt>
+                  <dd>
+                    {vehicle.plateNumber}
+                    {vehicle.makeModel ? ` · ${vehicle.makeModel}` : ""}
+                    {vehicle.parkingNumber ? ` · Parking ${vehicle.parkingNumber}` : ""}
+                  </dd>
+                </div>
+              ))}
             </dl>
           </section>
           <section className="panel profile-detail-card">

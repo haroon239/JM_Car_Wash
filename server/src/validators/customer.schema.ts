@@ -11,6 +11,18 @@ export const customerSchema = z.object({
   buildingNo: z.string().trim().max(50).optional().default(""),
   flatNo: z.string().trim().max(50).optional().default(""),
   parkingNo: z.string().trim().max(50).optional().default(""),
+  areaId: z.coerce.number().int().positive(),
+  buildingId: z.coerce.number().int().positive(),
+  vehicles: z
+    .array(
+      z.object({
+        plateNumber: z.string().trim().min(2).max(40),
+        makeModel: z.string().trim().max(120).optional().default(""),
+        parkingNumber: z.string().trim().max(50).optional().default(""),
+      }),
+    )
+    .min(1)
+    .max(20),
   planId: z.coerce.number().int().positive(),
   planStartDate: z.iso.date(),
   agreedPrice: z.coerce.number().nonnegative().max(9999999),

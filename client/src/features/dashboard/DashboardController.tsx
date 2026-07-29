@@ -9,6 +9,7 @@ import { CustomerProfilePage } from "../../pages/CustomerProfilePage";
 import { PaymentsPage } from "../../pages/PaymentsPage";
 import { PlansPage } from "../../pages/PlansPage";
 import { SettingsPage } from "../../pages/SettingsPage";
+import { LocationsPage } from "../../pages/LocationsPage";
 import type {
   CompanySettings,
   Customer,
@@ -18,6 +19,8 @@ import type {
   Payment,
   Plan,
   Section,
+  LocationSummary,
+  Vehicle,
 } from "../../types/domain";
 
 const planPrices: Record<string, number> = {
@@ -223,6 +226,9 @@ export function DashboardController() {
     billingType: "monthly",
     autoInvoice: true,
     nextInvoiceDate: calculateNextInvoiceDate(new Date().toISOString().slice(0, 10), "monthly"),
+    areaId: 0,
+    buildingId: 0,
+    vehicles: [{ plateNumber: "", makeModel: "", parkingNumber: "", isPrimary: true }],
   });
   const [notice, setNoticeState] = useState<{ message: string; kind: NoticeKind }>({
     message: "",
@@ -241,6 +247,9 @@ export function DashboardController() {
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [planForm, setPlanForm] = useState({ name: "", price: "", washesPerMonth: "" });
   const [section, setSection] = useState<Section>("overview");
+  const [locations, setLocations] = useState<LocationSummary[]>([]);
+  const [selectedAreaId, setSelectedAreaId] = useState<number | null>(null);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
   const [customerView, setCustomerView] = useState<"active" | "archived" | "all">("active");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [activeInvoice, setActiveInvoice] = useState<Invoice | null>(null);
@@ -289,28 +298,47 @@ export function DashboardController() {
           invoicesResponse,
           paymentsResponse,
           settingsResponse,
+          locationsResponse,
         ] = await Promise.all([
           fetch("/api/customers?view=all"),
           fetch("/api/plans"),
           fetch("/api/invoices"),
           fetch("/api/payments"),
           fetch("/api/settings"),
+          fetch("/api/locations"),
         ]);
         if (
           !customersResponse.ok ||
           !plansResponse.ok ||
           !invoicesResponse.ok ||
           !paymentsResponse.ok ||
-          !settingsResponse.ok
+          !settingsResponse.ok ||
+          !locationsResponse.ok
         )
           return;
-        const [customerRows, planRows, invoiceRows, paymentRows, settingsRow] = await Promise.all([
-          customersResponse.json(),
-          plansResponse.json(),
-          invoicesResponse.json(),
-          paymentsResponse.json(),
-          settingsResponse.json(),
-        ]);
+        const [customerRows, planRows, invoiceRows, paymentRows, settingsRow, locationRows] =
+          await Promise.all([
+            customersResponse.json(),
+            plansResponse.json(),
+            invoicesResponse.json(),
+            paymentsResponse.json(),
+            settingsResponse.json(),
+            locationsResponse.json(),
+          ]);
+        setLocations(
+          locationRows.map((location: Record<string, string | number>) => ({
+            ...location,
+            propertyId: Number(location.propertyId),
+            areaId: Number(location.areaId),
+            buildingId: Number(location.buildingId),
+            activeCustomers: Number(location.activeCustomers),
+            expectedRevenue: Number(location.expectedRevenue),
+            invoiced: Number(location.invoiced),
+            collected: Number(location.collected),
+            outstanding: Number(location.outstanding),
+            overdue: Number(location.overdue),
+          })) as LocationSummary[],
+        );
         setSettings({
           ...settingsRow,
           trn: settingsRow.trn ?? "",
@@ -372,6 +400,12 @@ export function DashboardController() {
               billingType?: Customer["billingType"];
               autoInvoice?: boolean;
               nextInvoiceDate?: string | null;
+              propertyName?: string;
+              areaId?: string | number;
+              areaName?: string;
+              buildingId?: string | number;
+              buildingName?: string;
+              vehicles?: Vehicle[];
             }) => ({
               id: Number(customer.id),
               name: customer.name,
@@ -380,6 +414,17 @@ export function DashboardController() {
               buildingNo: customer.buildingNo ?? "",
               flatNo: customer.flatNo ?? "",
               parkingNo: customer.parkingNo ?? "",
+              propertyName: customer.propertyName,
+              areaId: customer.areaId ? Number(customer.areaId) : undefined,
+              areaName: customer.areaName,
+              buildingId: customer.buildingId ? Number(customer.buildingId) : undefined,
+              buildingName: customer.buildingName,
+              vehicles: Array.isArray(customer.vehicles)
+                ? customer.vehicles.map((vehicle) => ({
+                    ...vehicle,
+                    id: vehicle.id ? Number(vehicle.id) : undefined,
+                  }))
+                : [],
               customerSince: customer.customerSince ?? new Date().toISOString(),
               plan: customer.plan ?? "No plan",
               planStartDate: customer.planStartDate?.slice(0, 10) ?? "",
@@ -455,9 +500,34 @@ export function DashboardController() {
     }
   }
 
+  const scopedCustomers = useMemo(
+    () =>
+      customers.filter(
+        (customer) =>
+          (selectedAreaId === null || customer.areaId === selectedAreaId) &&
+          (selectedBuildingId === null || customer.buildingId === selectedBuildingId),
+      ),
+    [customers, selectedAreaId, selectedBuildingId],
+  );
+  const scopedCustomerIds = useMemo(
+    () => new Set(scopedCustomers.map((customer) => customer.id)),
+    [scopedCustomers],
+  );
+  const scopedInvoices = useMemo(
+    () => invoices.filter((invoice) => scopedCustomerIds.has(invoice.customerId)),
+    [invoices, scopedCustomerIds],
+  );
+  const scopedInvoiceIds = useMemo(
+    () => new Set(scopedInvoices.map((invoice) => invoice.id)),
+    [scopedInvoices],
+  );
+  const scopedPayments = useMemo(
+    () => payments.filter((payment) => scopedInvoiceIds.has(payment.invoiceId)),
+    [payments, scopedInvoiceIds],
+  );
   const activeCustomers = useMemo(
-    () => customers.filter((customer) => !customer.archivedAt),
-    [customers],
+    () => scopedCustomers.filter((customer) => !customer.archivedAt),
+    [scopedCustomers],
   );
   const customerActions = useMemo(() => {
     const actionableInvoiceByCustomer = new Map<number, Invoice>();
@@ -468,7 +538,7 @@ export function DashboardController() {
       sent: 3,
       partially_paid: 3,
     };
-    for (const invoice of invoices) {
+    for (const invoice of scopedInvoices) {
       const status = invoice.status.toLowerCase();
       if (!(status in priority)) continue;
       const current = actionableInvoiceByCustomer.get(invoice.customerId);
@@ -503,7 +573,7 @@ export function DashboardController() {
         return action ? { customer, action } : null;
       })
       .filter((item): item is { customer: Customer; action: CustomerAction } => item !== null);
-  }, [activeCustomers, invoices]);
+  }, [activeCustomers, scopedInvoices]);
   const customerActionMap = useMemo(
     () => new Map(customerActions.map((item) => [item.customer.id, item.action])),
     [customerActions],
@@ -513,15 +583,15 @@ export function DashboardController() {
       expiring: customerActions.filter((item) =>
         ["expiring", "expires-today", "expired"].includes(item.action.kind),
       ).length,
-      ready: invoices.filter((invoice) => invoice.status.toLowerCase() === "pending").length,
-      overdue: invoices.filter((invoice) =>
+      ready: scopedInvoices.filter((invoice) => invoice.status.toLowerCase() === "pending").length,
+      overdue: scopedInvoices.filter((invoice) =>
         ["overdue", "partially_overdue"].includes(invoice.status.toLowerCase()),
       ).length,
-      pending: invoices.filter((invoice) =>
+      pending: scopedInvoices.filter((invoice) =>
         ["sent", "partially_paid"].includes(invoice.status.toLowerCase()),
       ).length,
     }),
-    [customerActions, invoices],
+    [customerActions, scopedInvoices],
   );
   const invoiceActionCount = actionCounts.ready + actionCounts.pending + actionCounts.overdue;
   const totalActionCount = actionCounts.expiring + invoiceActionCount;
@@ -536,7 +606,7 @@ export function DashboardController() {
   );
   const customerFiltered = useMemo(
     () =>
-      customers.filter((customer) => {
+      scopedCustomers.filter((customer) => {
         const matchesView =
           customerView === "all" ||
           (customerView === "archived" ? Boolean(customer.archivedAt) : !customer.archivedAt);
@@ -547,7 +617,7 @@ export function DashboardController() {
             .includes(query.toLowerCase())
         );
       }),
-    [customers, customerView, query],
+    [scopedCustomers, customerView, query],
   );
 
   function openWhatsApp(customer: Customer) {
@@ -863,6 +933,7 @@ export function DashboardController() {
             : customer,
         ),
       );
+      await reloadLocations();
       setPaymentInvoice(null);
       setNotice(
         Number(row.balance) <= 0
@@ -876,7 +947,83 @@ export function DashboardController() {
     }
   }
 
+  async function reloadLocations() {
+    const response = await fetch("/api/locations");
+    if (!response.ok) throw new Error("Unable to refresh locations");
+    const rows = await response.json();
+    setLocations(
+      rows.map((location: Record<string, string | number>) => ({
+        ...location,
+        propertyId: Number(location.propertyId),
+        areaId: Number(location.areaId),
+        buildingId: Number(location.buildingId),
+        activeCustomers: Number(location.activeCustomers),
+        expectedRevenue: Number(location.expectedRevenue),
+        invoiced: Number(location.invoiced),
+        collected: Number(location.collected),
+        outstanding: Number(location.outstanding),
+        overdue: Number(location.overdue),
+      })) as LocationSummary[],
+    );
+  }
+
+  async function addArea() {
+    const name = window.prompt("Enter the new area or cluster name:");
+    if (!name?.trim()) return;
+    const propertyId = locations[0]?.propertyId;
+    if (!propertyId) return setNotice("No property is configured.", "error");
+    try {
+      const response = await fetch("/api/locations/areas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyId, name: name.trim() }),
+      });
+      if (!response.ok) throw new Error((await response.json()).message ?? "Unable to add area");
+      const area = await response.json();
+      const buildingName = window.prompt(
+        `Area "${name.trim()}" created. Enter its first building name:`,
+      );
+      if (buildingName?.trim()) {
+        const buildingResponse = await fetch("/api/locations/buildings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ areaId: Number(area.id), name: buildingName.trim() }),
+        });
+        if (!buildingResponse.ok) throw new Error("Area saved, but building could not be added");
+      }
+      await reloadLocations();
+      setSelectedAreaId(Number(area.id));
+      setSelectedBuildingId(null);
+      setNotice(`${name.trim()} added successfully.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Unable to add area.", "error");
+    }
+  }
+
+  async function addBuilding(areaId: number) {
+    const name = window.prompt("Enter the building name or number:");
+    if (!name?.trim()) return;
+    try {
+      const response = await fetch("/api/locations/buildings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ areaId, name: name.trim() }),
+      });
+      if (!response.ok)
+        throw new Error((await response.json()).message ?? "Unable to add building");
+      await reloadLocations();
+      setNotice(`${name.trim()} added successfully.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Unable to add building.", "error");
+    }
+  }
+
   function openCustomerForm(customer?: Customer) {
+    const defaultAreaId = selectedAreaId ?? locations[0]?.areaId ?? 0;
+    const defaultBuildingId =
+      selectedBuildingId ??
+      locations.find((location) => location.areaId === defaultAreaId)?.buildingId ??
+      0;
     setEditing(customer ?? null);
     setCustomerForm(
       customer
@@ -893,6 +1040,18 @@ export function DashboardController() {
             billingType: customer.billingType,
             autoInvoice: customer.autoInvoice,
             nextInvoiceDate: customer.nextInvoiceDate,
+            areaId: customer.areaId ?? defaultAreaId,
+            buildingId: customer.buildingId ?? defaultBuildingId,
+            vehicles: customer.vehicles?.length
+              ? customer.vehicles
+              : [
+                  {
+                    plateNumber: customer.plate,
+                    makeModel: "",
+                    parkingNumber: customer.parkingNo,
+                    isPrimary: true,
+                  },
+                ],
           }
         : {
             name: "",
@@ -910,6 +1069,9 @@ export function DashboardController() {
               new Date().toISOString().slice(0, 10),
               "monthly",
             ),
+            areaId: defaultAreaId,
+            buildingId: defaultBuildingId,
+            vehicles: [{ plateNumber: "", makeModel: "", parkingNumber: "", isPrimary: true }],
           },
     );
     setShowCustomerForm(true);
@@ -919,6 +1081,14 @@ export function DashboardController() {
     event.preventDefault();
     const selectedPlan = plans.find((plan) => plan.name === customerForm.plan);
     if (!selectedPlan) return setNotice("Please select a valid plan.", "error");
+    const selectedLocation = locations.find(
+      (location) =>
+        location.areaId === customerForm.areaId && location.buildingId === customerForm.buildingId,
+    );
+    if (!selectedLocation) return setNotice("Please select a valid area and building.", "error");
+    const vehicles = customerForm.vehicles.filter((vehicle) => vehicle.plateNumber.trim());
+    if (!vehicles.length) return setNotice("Please add at least one vehicle.", "error");
+    const primaryVehicle = vehicles[0];
     setIsSaving(true);
     try {
       const response = await fetch(editing ? `/api/customers/${editing.id}` : "/api/customers", {
@@ -928,10 +1098,13 @@ export function DashboardController() {
           name: customerForm.name,
           phone: customerForm.phone,
           email: "",
-          plateNumber: customerForm.plate,
-          buildingNo: customerForm.buildingNo,
+          plateNumber: primaryVehicle.plateNumber,
+          buildingNo: selectedLocation.buildingName,
           flatNo: customerForm.flatNo,
-          parkingNo: customerForm.parkingNo,
+          parkingNo: primaryVehicle.parkingNumber,
+          areaId: customerForm.areaId,
+          buildingId: customerForm.buildingId,
+          vehicles,
           planId: selectedPlan.id,
           planStartDate: customerForm.planStartDate,
           agreedPrice: customerForm.amount,
@@ -947,6 +1120,13 @@ export function DashboardController() {
       const record: Customer = {
         id: Number(saved.id),
         ...customerForm,
+        plate: primaryVehicle.plateNumber,
+        parkingNo: primaryVehicle.parkingNumber,
+        buildingNo: selectedLocation.buildingName,
+        propertyName: selectedLocation.propertyName,
+        areaName: selectedLocation.areaName,
+        buildingName: selectedLocation.buildingName,
+        vehicles,
         amount: customerForm.amount,
         due: "01 Aug 2026",
         status: editing?.status ?? "Pending",
@@ -958,6 +1138,7 @@ export function DashboardController() {
           ? current.map((customer) => (customer.id === editing.id ? record : customer))
           : [record, ...current],
       );
+      await reloadLocations();
       setNotice(`${customerForm.name} ${editing ? "updated" : "added"} successfully.`);
       setShowCustomerForm(false);
     } catch (error) {
@@ -1083,13 +1264,88 @@ export function DashboardController() {
             setShowPlans(true);
             openPlanForm();
           }}
-          hidePrimaryAction={section === "customers" && Boolean(profileCustomer)}
+          hidePrimaryAction={
+            section === "locations" || (section === "customers" && Boolean(profileCustomer))
+          }
         />
+        <div className="location-scope-bar">
+          <div>
+            <strong>Location view</strong>
+            <small>Dashboard, customers, invoices and payments follow this selection.</small>
+          </div>
+          <select
+            aria-label="Filter by area"
+            value={selectedAreaId ?? ""}
+            onChange={(event) => {
+              setSelectedAreaId(event.target.value ? Number(event.target.value) : null);
+              setSelectedBuildingId(null);
+              setProfileCustomerId(null);
+            }}
+          >
+            <option value="">All areas</option>
+            {Array.from(
+              new Map(locations.map((location) => [location.areaId, location])).values(),
+            ).map((location) => (
+              <option key={location.areaId} value={location.areaId}>
+                {location.areaName}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by building"
+            value={selectedBuildingId ?? ""}
+            onChange={(event) => {
+              const buildingId = event.target.value ? Number(event.target.value) : null;
+              setSelectedBuildingId(buildingId);
+              const location = locations.find((item) => item.buildingId === buildingId);
+              if (location) setSelectedAreaId(location.areaId);
+              setProfileCustomerId(null);
+            }}
+          >
+            <option value="">All buildings</option>
+            {locations
+              .filter((location) => selectedAreaId === null || location.areaId === selectedAreaId)
+              .map((location) => (
+                <option key={location.buildingId} value={location.buildingId}>
+                  {location.buildingName}
+                </option>
+              ))}
+          </select>
+          {(selectedAreaId !== null || selectedBuildingId !== null) && (
+            <button
+              className="secondary"
+              onClick={() => {
+                setSelectedAreaId(null);
+                setSelectedBuildingId(null);
+                setProfileCustomerId(null);
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
         <Notice
           message={notice.message}
           kind={notice.kind}
           onClose={() => setNoticeState({ message: "", kind: "success" })}
         />
+
+        {section === "locations" && (
+          <LocationsPage
+            locations={locations}
+            selectedAreaId={selectedAreaId}
+            selectedBuildingId={selectedBuildingId}
+            onSelectArea={setSelectedAreaId}
+            onSelectBuilding={setSelectedBuildingId}
+            onAddArea={() => void addArea()}
+            onAddBuilding={(areaId) => void addBuilding(areaId)}
+            onUseBuilding={(areaId, buildingId) => {
+              setSelectedAreaId(areaId);
+              setSelectedBuildingId(buildingId);
+              setSection("customers");
+            }}
+          />
+        )}
 
         {section === "customers" && !profileCustomer && (
           <section className="panel section-panel">
@@ -1097,8 +1353,8 @@ export function DashboardController() {
               <div>
                 <h2>Customer directory</h2>
                 <p>
-                  {activeCustomers.length} active · {customers.length - activeCustomers.length}{" "}
-                  archived
+                  {activeCustomers.length} active ·{" "}
+                  {scopedCustomers.length - activeCustomers.length} archived
                 </p>
               </div>
               <div className="view-tabs">
@@ -1139,6 +1395,7 @@ export function DashboardController() {
                   <tr>
                     <th>Customer</th>
                     <th>WhatsApp</th>
+                    <th>Location</th>
                     <th>Plan</th>
                     <th>Plan started</th>
                     <th>Plan expiry</th>
@@ -1177,6 +1434,10 @@ export function DashboardController() {
                         </div>
                       </td>
                       <td>{customer.phone}</td>
+                      <td>
+                        {customer.buildingName ?? customer.buildingNo}
+                        <small>{customer.areaName ?? "Unassigned"}</small>
+                      </td>
                       <td>
                         {customer.plan}
                         <small>
@@ -1297,14 +1558,16 @@ export function DashboardController() {
 
         {section === "invoices" && (
           <InvoicesPage
-            invoices={invoices}
+            invoices={scopedInvoices}
             onView={openSavedInvoice}
             onEdit={openInvoiceEditor}
             onPaid={(invoice) => void recordPayment(invoice)}
           />
         )}
 
-        {section === "payments" && <PaymentsPage payments={payments} invoices={invoices} />}
+        {section === "payments" && (
+          <PaymentsPage payments={scopedPayments} invoices={scopedInvoices} />
+        )}
 
         {section === "settings" && (
           <SettingsPage
@@ -1347,11 +1610,19 @@ export function DashboardController() {
               <strong>
                 AED{" "}
                 {activeCustomers
-                  .filter((customer) => customer.billingType === "monthly")
-                  .reduce((sum, customer) => sum + customer.amount, 0)
+                  .reduce(
+                    (sum, customer) =>
+                      sum +
+                      (customer.billingType === "monthly"
+                        ? customer.amount
+                        : customer.billingType === "weekly"
+                          ? (customer.amount * 52) / 12
+                          : 0),
+                    0,
+                  )
                   .toFixed(2)}
               </strong>
-              <p>Monthly agreements</p>
+              <p>Expected monthly equivalent</p>
             </div>
           </article>
           <article>
@@ -1360,7 +1631,7 @@ export function DashboardController() {
               <small>PAYMENT PENDING</small>
               <strong>
                 AED{" "}
-                {invoices
+                {scopedInvoices
                   .filter((invoice) =>
                     ["pending", "sent", "partially_paid"].includes(invoice.status),
                   )
@@ -1576,25 +1847,51 @@ export function DashboardController() {
                 <small>Use UAE format without + or spaces</small>
               </label>
               <label>
-                <span>Vehicle / plate number</span>
-                <input
+                <span>Area / cluster</span>
+                <select
                   required
-                  value={customerForm.plate}
-                  onChange={(event) =>
-                    setCustomerForm({ ...customerForm, plate: event.target.value })
-                  }
-                  placeholder="Dubai A 45218"
-                />
+                  value={customerForm.areaId || ""}
+                  onChange={(event) => {
+                    const areaId = Number(event.target.value);
+                    setCustomerForm({
+                      ...customerForm,
+                      areaId,
+                      buildingId:
+                        locations.find((location) => location.areaId === areaId)?.buildingId ?? 0,
+                    });
+                  }}
+                >
+                  <option value="">Select area</option>
+                  {Array.from(
+                    new Map(locations.map((location) => [location.areaId, location])).values(),
+                  ).map((location) => (
+                    <option key={location.areaId} value={location.areaId}>
+                      {location.areaName}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
-                <span>Building number (optional)</span>
-                <input
-                  value={customerForm.buildingNo}
+                <span>Building</span>
+                <select
+                  required
+                  value={customerForm.buildingId || ""}
                   onChange={(event) =>
-                    setCustomerForm({ ...customerForm, buildingNo: event.target.value })
+                    setCustomerForm({
+                      ...customerForm,
+                      buildingId: Number(event.target.value),
+                    })
                   }
-                  placeholder="e.g. SA MAR"
-                />
+                >
+                  <option value="">Select building</option>
+                  {locations
+                    .filter((location) => location.areaId === customerForm.areaId)
+                    .map((location) => (
+                      <option key={location.buildingId} value={location.buildingId}>
+                        {location.buildingName}
+                      </option>
+                    ))}
+                </select>
               </label>
               <label>
                 <span>Flat number (optional)</span>
@@ -1606,16 +1903,96 @@ export function DashboardController() {
                   placeholder="e.g. 8046"
                 />
               </label>
-              <label>
-                <span>Parking number (optional)</span>
-                <input
-                  value={customerForm.parkingNo}
-                  onChange={(event) =>
-                    setCustomerForm({ ...customerForm, parkingNo: event.target.value })
+              <fieldset className="vehicle-editor">
+                <legend>Vehicles</legend>
+                {customerForm.vehicles.map((vehicle, index) => (
+                  <div className="vehicle-row" key={`${index}-${vehicle.id ?? "new"}`}>
+                    <label>
+                      <span>Plate number {index === 0 ? "(primary)" : ""}</span>
+                      <input
+                        required
+                        value={vehicle.plateNumber}
+                        onChange={(event) =>
+                          setCustomerForm({
+                            ...customerForm,
+                            vehicles: customerForm.vehicles.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, plateNumber: event.target.value }
+                                : item,
+                            ),
+                          })
+                        }
+                        placeholder="Dubai A 45218"
+                      />
+                    </label>
+                    <label>
+                      <span>Vehicle make / model</span>
+                      <input
+                        value={vehicle.makeModel}
+                        onChange={(event) =>
+                          setCustomerForm({
+                            ...customerForm,
+                            vehicles: customerForm.vehicles.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, makeModel: event.target.value }
+                                : item,
+                            ),
+                          })
+                        }
+                        placeholder="e.g. Toyota Camry"
+                      />
+                    </label>
+                    <label>
+                      <span>Parking number</span>
+                      <input
+                        value={vehicle.parkingNumber}
+                        onChange={(event) =>
+                          setCustomerForm({
+                            ...customerForm,
+                            vehicles: customerForm.vehicles.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, parkingNumber: event.target.value }
+                                : item,
+                            ),
+                          })
+                        }
+                        placeholder="e.g. P210"
+                      />
+                    </label>
+                    {customerForm.vehicles.length > 1 && (
+                      <button
+                        type="button"
+                        className="danger vehicle-remove"
+                        onClick={() =>
+                          setCustomerForm({
+                            ...customerForm,
+                            vehicles: customerForm.vehicles.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                          })
+                        }
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    setCustomerForm({
+                      ...customerForm,
+                      vehicles: [
+                        ...customerForm.vehicles,
+                        { plateNumber: "", makeModel: "", parkingNumber: "" },
+                      ],
+                    })
                   }
-                  placeholder="e.g. 32"
-                />
-              </label>
+                >
+                  + Add another vehicle
+                </button>
+              </fieldset>
               <label>
                 <span>Subscription plan</span>
                 <select

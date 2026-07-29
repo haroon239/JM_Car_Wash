@@ -15,7 +15,7 @@ export function InvoicesPage({
       <div className="panel-head">
         <div>
           <h2>Generated invoices</h2>
-          <p>{invoices.length} invoices stored in PostgreSQL</p>
+          <p>{invoices.length} invoices in the current location view</p>
         </div>
       </div>
       <div className="table-wrap">

@@ -6,6 +6,11 @@ const copy: Record<Section, { eyebrow: string; title: string; subtitle: string }
     title: "Good evening, Haroon",
     subtitle: "Here’s what’s happening with your car wash subscriptions.",
   },
+  locations: {
+    eyebrow: "PROPERTY MANAGEMENT",
+    title: "Locations",
+    subtitle: "Manage areas, buildings, customers and location performance.",
+  },
   customers: {
     eyebrow: "CUSTOMER MANAGEMENT",
     title: "Customers",

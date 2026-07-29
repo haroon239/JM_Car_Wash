@@ -6,6 +6,12 @@ export type Customer = {
   buildingNo: string;
   flatNo: string;
   parkingNo: string;
+  propertyName?: string;
+  areaId?: number;
+  areaName?: string;
+  buildingId?: number;
+  buildingName?: string;
+  vehicles?: Vehicle[];
   customerSince: string;
   plan: string;
   amount: number;
@@ -31,7 +37,32 @@ export type CustomerForm = Pick<
   | "billingType"
   | "autoInvoice"
   | "nextInvoiceDate"
->;
+> & {
+  areaId: number;
+  buildingId: number;
+  vehicles: Vehicle[];
+};
+export type Vehicle = {
+  id?: number;
+  plateNumber: string;
+  makeModel: string;
+  parkingNumber: string;
+  isPrimary?: boolean;
+};
+export type LocationSummary = {
+  propertyId: number;
+  propertyName: string;
+  areaId: number;
+  areaName: string;
+  buildingId: number;
+  buildingName: string;
+  activeCustomers: number;
+  expectedRevenue: number;
+  invoiced: number;
+  collected: number;
+  outstanding: number;
+  overdue: number;
+};
 export type Plan = { id: number; name: string; price: number; washesPerMonth: number | null };
 export type Invoice = {
   id: number;
@@ -73,7 +104,8 @@ export type CustomerActivity = {
   actor: string;
   createdAt: string;
 };
-export type Section = "overview" | "customers" | "plans" | "invoices" | "payments" | "settings";
+export type Section =
+  "overview" | "locations" | "customers" | "plans" | "invoices" | "payments" | "settings";
 export type CustomerView = "active" | "archived" | "all";
 export type CompanySettings = {
   companyName: string;
