@@ -1767,31 +1767,22 @@ export function DashboardController() {
             </div>
             <div className="donut">
               <div>
-                <strong>776</strong>
+                <strong>{activeCustomers.length}</strong>
                 <small>active</small>
               </div>
             </div>
             <div className="legend">
-              <p>
-                <span className="dot premium"></span>
-                <b>Premium</b>
-                <strong>312</strong>
-              </p>
-              <p>
-                <span className="dot standard"></span>
-                <b>Standard</b>
-                <strong>248</strong>
-              </p>
-              <p>
-                <span className="dot basic"></span>
-                <b>Basic</b>
-                <strong>164</strong>
-              </p>
-              <p>
-                <span className="dot corporate"></span>
-                <b>Corporate</b>
-                <strong>52</strong>
-              </p>
+              {plans.map((plan, index) => (
+                <p key={plan.id}>
+                  <span
+                    className={`dot ${["premium", "standard", "basic", "corporate"][index % 4]}`}
+                  ></span>
+                  <b>{plan.name}</b>
+                  <strong>
+                    {activeCustomers.filter((customer) => customer.plan === plan.name).length}
+                  </strong>
+                </p>
+              ))}
             </div>
             <button
               className="secondary"
