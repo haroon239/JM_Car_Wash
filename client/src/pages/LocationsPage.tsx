@@ -96,7 +96,7 @@ export function LocationsPage({
           </article>
         </div>
         <section className="panel location-financial-panel">
-          <h3>Financial performance</h3>
+          <h3>Financial performances</h3>
           <dl>
             <div>
               <dt>Total invoiced</dt>

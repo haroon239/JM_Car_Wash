@@ -48,7 +48,7 @@ export function SettingsPage({ settings, isSaving, onChange, onSave }: Props) {
           />
         </label>
         <label>
-          <span>Company email</span>
+          <span>Company emails</span>
           <input
             required
             type="email"
