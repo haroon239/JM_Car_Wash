@@ -215,7 +215,7 @@ export function DashboardController() {
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [customerForm, setCustomerForm] = useState<CustomerForm>({
     name: "",
-    phone: "971",
+    phone: "",
     plate: "",
     buildingNo: "",
     flatNo: "",
@@ -1092,7 +1092,7 @@ export function DashboardController() {
           }
         : {
             name: "",
-            phone: "971",
+            phone: "",
             plate: "",
             buildingNo: "",
             flatNo: "",
@@ -1864,7 +1864,10 @@ export function DashboardController() {
                 <span>WhatsApp number</span>
                 <input
                   required
-                  pattern="971[0-9]{9}"
+                  inputMode="tel"
+                  pattern="[0-9]{7,15}"
+                  minLength={7}
+                  maxLength={15}
                   value={customerForm.phone}
                   onChange={(event) =>
                     setCustomerForm({
@@ -1872,9 +1875,12 @@ export function DashboardController() {
                       phone: event.target.value.replace(/\D/g, ""),
                     })
                   }
-                  placeholder="971501234567"
+                  placeholder="e.g. 971501234567 or 923001234567"
                 />
-                <small>Use UAE format without + or spaces</small>
+                <small>
+                  Enter country code followed by the number; +, spaces and dashes are removed
+                  automatically.
+                </small>
               </label>
               <label>
                 <span>Area / cluster</span>

@@ -20,6 +20,7 @@ export const errorHandler: ErrorRequestHandler = (
       address: "Please enter a valid business address.",
       invoicePrefix: "Invoice prefix may only contain capital letters, numbers and hyphens.",
       vatRate: "Please enter a VAT rate between 0 and 100.",
+      phone: "Enter a valid international WhatsApp number with country code (7 to 15 digits).",
     };
     return response.status(400).json({
       message: messages[String(field)] ?? "Please check the entered information and try again.",

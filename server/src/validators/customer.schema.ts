@@ -5,7 +5,7 @@ export const customerSchema = z.object({
   phone: z
     .string()
     .trim()
-    .regex(/^971\d{9}$/),
+    .regex(/^\d{7,15}$/),
   email: z.email().optional().or(z.literal("")),
   plateNumber: z.string().trim().min(2).max(40),
   buildingNo: z.string().trim().max(50).optional().default(""),
