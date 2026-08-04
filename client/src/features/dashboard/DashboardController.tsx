@@ -1597,7 +1597,14 @@ export function DashboardController() {
 
         {section === "invoices" && (
           <InvoicesPage
-            invoices={scopedInvoices}
+            refreshKey={invoices
+              .map(
+                (invoice) =>
+                  `${invoice.id}:${invoice.status}:${invoice.balance}:${invoice.revisionNumber}`,
+              )
+              .join("|")}
+            areaId={selectedAreaId}
+            buildingId={selectedBuildingId}
             onView={openSavedInvoice}
             onEdit={openInvoiceEditor}
             onPaid={(invoice) => void recordPayment(invoice)}

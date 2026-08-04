@@ -26,6 +26,65 @@ export async function findInvoices() {
   ).rows;
 }
 
+export type InvoicePageOptions = {
+  page: number;
+  pageSize: number;
+  search?: string;
+  status?: string;
+  areaId?: number;
+  buildingId?: number;
+};
+
+export async function findInvoicePage(options: InvoicePageOptions) {
+  const conditions: string[] = ["c.deleted_at IS NULL"];
+  const values: Array<string | number> = [];
+  const addValue = (value: string | number) => {
+    values.push(value);
+    return `$${values.length}`;
+  };
+
+  if (options.search) {
+    const parameter = addValue(`%${options.search}%`);
+    conditions.push(
+      `(i.invoice_number ILIKE ${parameter} OR c.name ILIKE ${parameter} OR c.plate_number ILIKE ${parameter})`,
+    );
+  }
+  if (options.status) conditions.push(`i.status=${addValue(options.status)}`);
+  if (options.areaId) conditions.push(`c.area_id=${addValue(options.areaId)}`);
+  if (options.buildingId) conditions.push(`c.building_id=${addValue(options.buildingId)}`);
+
+  const where = `WHERE ${conditions.join(" AND ")}`;
+  const database = requireDatabase();
+  const total = Number(
+    (
+      await database.query(
+        `SELECT COUNT(*) AS total FROM invoices i JOIN customers c ON c.id=i.customer_id ${where}`,
+        values,
+      )
+    ).rows[0].total,
+  );
+  const totalPages = Math.max(1, Math.ceil(total / options.pageSize));
+  const page = Math.min(options.page, totalPages);
+  const limitParameter = addValue(options.pageSize);
+  const offsetParameter = addValue((page - 1) * options.pageSize);
+  const items = (
+    await database.query(
+      `SELECT ${invoiceFields},c.name AS "customerName",c.phone,
+        c.plate_number AS "plateNumber",c.billing_type AS "billingType",
+        p.name AS "planName"
+       FROM invoices i
+       JOIN customers c ON c.id=i.customer_id
+       LEFT JOIN plans p ON p.id=c.plan_id
+       ${where}
+       ORDER BY i.issue_date DESC,i.id DESC
+       LIMIT ${limitParameter} OFFSET ${offsetParameter}`,
+      values,
+    )
+  ).rows;
+
+  return { items, total, page, pageSize: options.pageSize, totalPages };
+}
+
 type InvoiceGenerationOptions = {
   issueDate?: string;
   billingPeriod?: string;

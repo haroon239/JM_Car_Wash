@@ -7,6 +7,39 @@ import { invoiceEditSchema, invoiceStatusSchema } from "../validators/payment.sc
 export async function listInvoices(_request: Request, response: Response) {
   response.json(await invoiceModel.findInvoices());
 }
+export async function listInvoicePage(request: Request, response: Response) {
+  const positiveInteger = (value: unknown, fallback: number, maximum?: number) => {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1) return fallback;
+    return maximum ? Math.min(parsed, maximum) : parsed;
+  };
+  const optionalId = (value: unknown) => {
+    if (value === undefined || value === "") return undefined;
+    return positiveInteger(value, 0) || undefined;
+  };
+  const allowedStatuses = new Set([
+    "pending",
+    "sent",
+    "paid",
+    "overdue",
+    "partially_paid",
+    "partially_overdue",
+  ]);
+  const status = String(request.query.status ?? "");
+  response.json(
+    await invoiceModel.findInvoicePage({
+      page: positiveInteger(request.query.page, 1),
+      pageSize: positiveInteger(request.query.pageSize, 20, 100),
+      search:
+        String(request.query.search ?? "")
+          .trim()
+          .slice(0, 100) || undefined,
+      status: allowedStatuses.has(status) ? status : undefined,
+      areaId: optionalId(request.query.areaId),
+      buildingId: optionalId(request.query.buildingId),
+    }),
+  );
+}
 export async function createInvoice(request: Request, response: Response) {
   const customerId = idSchema.parse(request.body.customerId);
   const invoice = await createNextCustomerInvoice(customerId);

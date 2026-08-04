@@ -1667,6 +1667,62 @@ td small {
 .section-panel {
   margin-top: 4px;
 }
+.invoice-list-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 180px 150px;
+  gap: 10px;
+  padding: 0 22px 16px;
+}
+.invoice-list-toolbar input,
+.invoice-list-toolbar select {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 10px 12px;
+  color: var(--ink);
+  outline: none;
+}
+.invoice-list-toolbar input:focus,
+.invoice-list-toolbar select:focus {
+  border-color: var(--teal);
+}
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding: 16px 22px;
+}
+.pagination-bar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.pagination-bar > div {
+  display: flex;
+  gap: 6px;
+}
+.pagination-bar button {
+  min-width: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  padding: 7px 10px;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+.pagination-bar button.active {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: white;
+}
+.pagination-bar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
 .plan-cards {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1773,6 +1829,17 @@ td small {
   }
 }
 @media (max-width: 600px) {
+  .invoice-list-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .pagination-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .pagination-bar > div {
+    max-width: 100%;
+    overflow-x: auto;
+  }
   .plan-cards,
   .payment-summary,
   .settings-card form {
