@@ -66,7 +66,7 @@ export function CustomerProfilePage({
         </div>
         <div className="profile-actions">
           <button className="secondary" onClick={onEdit}>
-            Edit customer
+            Edit customer 
           </button>
           <button className="whatsapp" onClick={onWhatsApp}>
             WhatsApp
@@ -324,7 +324,7 @@ export function CustomerProfilePage({
               </article>
             ))}
             {activities.length === 0 && (
-              <div className="empty-state">No activity recorded yet.</div>
+              <div className="empty-state">No activity recorded yet..</div>
             )}
           </div>
         </section>
