@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateNextBillingDate } from "./billing";
-import { formatBillingType, formatInvoiceStatus } from "./display";
+import { formatBillingType, formatInvoiceStatus, getDubaiIsoDate } from "./display";
 
 test("monthly billing keeps the preferred day", () => {
   assert.equal(calculateNextBillingDate("2026-07-19", "monthly"), "2026-08-19");
@@ -19,4 +19,8 @@ test("weekly and manual billing dates are predictable", () => {
 test("technical values become owner-friendly labels", () => {
   assert.equal(formatInvoiceStatus("partially_overdue"), "Partial payment overdue");
   assert.equal(formatBillingType("bank_transfer"), "Bank transfer");
+});
+
+test("report dates use the Dubai calendar day", () => {
+  assert.equal(getDubaiIsoDate(new Date("2026-08-10T21:30:00Z")), "2026-08-11");
 });

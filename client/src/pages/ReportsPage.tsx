@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Customer, Invoice, Payment } from "../types/domain";
-import { formatInvoiceStatus } from "../utils/display";
+import { formatInvoiceStatus, getDubaiIsoDate } from "../utils/display";
 
 function csvCell(value: unknown) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
@@ -30,7 +30,7 @@ export function ReportsPage({
   invoices: Invoice[];
   payments: Payment[];
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getDubaiIsoDate();
   const monthStart = `${today.slice(0, 8)}01`;
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(today);
@@ -47,11 +47,17 @@ export function ReportsPage({
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/health", { signal: controller.signal })
-      .then((response) => response.json())
-      .then(setBillingHealth)
-      .catch(() => setBillingHealth(null));
-    return () => controller.abort();
+    const loadHealth = () =>
+      fetch("/api/health", { signal: controller.signal })
+        .then((response) => response.json())
+        .then(setBillingHealth)
+        .catch(() => setBillingHealth(null));
+    void loadHealth();
+    const timer = window.setInterval(() => void loadHealth(), 15_000);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
   }, []);
 
   const filteredInvoices = useMemo(
@@ -204,7 +210,9 @@ export function ReportsPage({
                 ? "The last automatic billing check needs attention."
                 : billingHealth?.billing?.running
                   ? "Automatic billing is checking customer records now."
-                  : "Automatic invoice checking is operating normally."}
+                  : billingHealth?.billing?.lastCompletedAt
+                    ? "Automatic invoice checking is operating normally."
+                    : "Automatic billing is starting its first check."}
             </p>
           </div>
         </div>
