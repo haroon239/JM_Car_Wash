@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Invoice } from "../types/domain";
+import { formatInvoiceStatus } from "../utils/display";
 export function InvoicesPage({
   refreshKey,
   areaId,
@@ -151,7 +152,7 @@ export function InvoicesPage({
                     )}
                   </td>
                   <td>
-                    <i className={`status ${i.status}`}>{i.status}</i>
+                    <i className={`status ${i.status}`}>{formatInvoiceStatus(i.status)}</i>
                   </td>
                   <td>
                     <div className="row-actions">

@@ -1,9 +1,10 @@
 import type { Section } from "../../types/domain";
+import { formatDubaiDate, getDubaiGreeting } from "../../utils/display";
 
 const copy: Record<Section, { eyebrow: string; title: string; subtitle: string }> = {
   overview: {
-    eyebrow: "SATURDAY, 18 JULY",
-    title: "Good evening, Haroon",
+    eyebrow: "",
+    title: "",
     subtitle: "Here’s what’s happening with your car wash subscriptions.",
   },
   locations: {
@@ -31,6 +32,11 @@ const copy: Record<Section, { eyebrow: string; title: string; subtitle: string }
     title: "Payment history",
     subtitle: "Review paid, pending and overdue balances.",
   },
+  reports: {
+    eyebrow: "BUSINESS INSIGHTS",
+    title: "Reports & export",
+    subtitle: "Review revenue and download business records.",
+  },
   settings: {
     eyebrow: "BUSINESS",
     title: "Settings",
@@ -50,16 +56,18 @@ export function PageHeader({
   hidePrimaryAction?: boolean;
 }) {
   const item = copy[section];
+  const eyebrow = section === "overview" ? formatDubaiDate().toUpperCase() : item.eyebrow;
+  const title = section === "overview" ? `${getDubaiGreeting()}, Haroon` : item.title;
 
   return (
     <header>
       <div>
-        <p className="eyebrow">{item.eyebrow}</p>
-        <h1>{item.title}</h1>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>{title}</h1>
         <p>{item.subtitle}</p>
       </div>
       <div className="header-actions">
-        {!hidePrimaryAction && (
+        {!hidePrimaryAction && section !== "reports" && (
           <button className="primary" onClick={section === "plans" ? onAddPlan : onAddCustomer}>
             + Add {section === "plans" ? "plan" : "customer"}
           </button>

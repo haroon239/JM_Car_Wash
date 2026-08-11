@@ -2,6 +2,17 @@
 
 Production-oriented customer subscription, invoice and payment management system for a UAE car-wash company.
 
+## Owner workflow
+
+- Add customers, locations, vehicles, custom prices and billing schedules.
+- Generate recurring invoices and monitor the automatic billing health check.
+- Share invoice PDFs through the device share menu or WhatsApp.
+- Record full or partial payments while preserving customer and invoice history.
+- Review location-scoped revenue, outstanding balances and overdue payments.
+- Export customer and invoice reports as Excel-compatible CSV files.
+
+Authentication is intentionally deferred while the application is operated by one owner. It should be enabled before access is shared with employees or third parties.
+
 ## Architecture
 
 ```text
@@ -51,6 +62,7 @@ npm run dev
 
 ```bash
 npm run typecheck
+npm test
 npm run build
 ```
 

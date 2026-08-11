@@ -105,7 +105,14 @@ export type CustomerActivity = {
   createdAt: string;
 };
 export type Section =
-  "overview" | "locations" | "customers" | "plans" | "invoices" | "payments" | "settings";
+  | "overview"
+  | "locations"
+  | "customers"
+  | "plans"
+  | "invoices"
+  | "payments"
+  | "reports"
+  | "settings";
 export type CustomerView = "active" | "archived" | "all";
 export type CompanySettings = {
   companyName: string;

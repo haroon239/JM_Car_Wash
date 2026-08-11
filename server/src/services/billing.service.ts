@@ -10,27 +10,57 @@ const DUBAI_OFFSET_MS = 4 * 60 * 60 * 1000;
 const RUN_MINUTE_AFTER_MIDNIGHT = 5;
 const MAX_CATCH_UP_CYCLES = 120;
 
+export const billingMaintenanceStatus: {
+  running: boolean;
+  lastStartedAt: string | null;
+  lastCompletedAt: string | null;
+  lastGeneratedCount: number;
+  lastOverdueCount: number;
+  lastError: string | null;
+} = {
+  running: false,
+  lastStartedAt: null,
+  lastCompletedAt: null,
+  lastGeneratedCount: 0,
+  lastOverdueCount: 0,
+  lastError: null,
+};
+
 export async function runBillingMaintenance() {
+  if (billingMaintenanceStatus.running) return;
+  billingMaintenanceStatus.running = true;
+  billingMaintenanceStatus.lastStartedAt = new Date().toISOString();
   let generatedCount = 0;
-  for (let cycle = 0; cycle < MAX_CATCH_UP_CYCLES; cycle += 1) {
-    const customers = await findCustomersDueForInvoice();
-    if (!customers.length) break;
+  try {
+    for (let cycle = 0; cycle < MAX_CATCH_UP_CYCLES; cycle += 1) {
+      const customers = await findCustomersDueForInvoice();
+      if (!customers.length) break;
 
-    for (const customer of customers) {
-      const invoice = await createInvoice(Number(customer.id), {
-        issueDate: customer.invoiceDate,
-        billingPeriod: customer.invoiceDate,
-        source: "automatic",
-      });
-      if (!invoice.wasExisting) generatedCount += 1;
-      await advanceCustomerBilling(Number(customer.id), customer.billingType);
+      for (const customer of customers) {
+        const invoice = await createInvoice(Number(customer.id), {
+          issueDate: customer.invoiceDate,
+          billingPeriod: customer.invoiceDate,
+          source: "automatic",
+        });
+        if (!invoice.wasExisting) generatedCount += 1;
+        await advanceCustomerBilling(Number(customer.id), customer.billingType);
+      }
     }
-  }
 
-  const overdueCount = await markPastDueInvoicesOverdue();
-  console.log(
-    `Billing maintenance completed: ${generatedCount} invoice(s) generated, ${overdueCount ?? 0} marked overdue.`,
-  );
+    const overdueCount = await markPastDueInvoicesOverdue();
+    billingMaintenanceStatus.lastCompletedAt = new Date().toISOString();
+    billingMaintenanceStatus.lastGeneratedCount = generatedCount;
+    billingMaintenanceStatus.lastOverdueCount = overdueCount ?? 0;
+    billingMaintenanceStatus.lastError = null;
+    console.log(
+      `Billing maintenance completed: ${generatedCount} invoice(s) generated, ${overdueCount ?? 0} marked overdue.`,
+    );
+  } catch (error) {
+    billingMaintenanceStatus.lastError = error instanceof Error ? error.message : "Unknown error";
+    throw error;
+  } finally {
+    billingMaintenanceStatus.running = false;
+  }
 }
 
 export async function createNextCustomerInvoice(customerId: number) {

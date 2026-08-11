@@ -10,6 +10,7 @@ import { PaymentsPage } from "../../pages/PaymentsPage";
 import { PlansPage } from "../../pages/PlansPage";
 import { SettingsPage } from "../../pages/SettingsPage";
 import { LocationsPage } from "../../pages/LocationsPage";
+import { ReportsPage } from "../../pages/ReportsPage";
 import type {
   CompanySettings,
   Customer,
@@ -22,6 +23,8 @@ import type {
   LocationSummary,
   Vehicle,
 } from "../../types/domain";
+import { formatBillingType } from "../../utils/display";
+import { calculateNextBillingDate } from "../../utils/billing";
 
 const planPrices: Record<string, number> = {
   Basic: 99,
@@ -89,20 +92,6 @@ function formatBillingPeriod(invoice: Invoice) {
   return `${formatter.format(start)} – ${formatter.format(end)}`;
 }
 
-function calculateNextInvoiceDate(startDate: string, billingType: Customer["billingType"]) {
-  if (!startDate || billingType === "manual") return "";
-  const date = new Date(`${startDate}T00:00:00`);
-  if (billingType === "monthly") {
-    const preferredDay = date.getDate();
-    date.setDate(1);
-    date.setMonth(date.getMonth() + 1);
-    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-    date.setDate(Math.min(preferredDay, lastDay));
-  }
-  if (billingType === "weekly") date.setDate(date.getDate() + 7);
-  return date.toISOString().slice(0, 10);
-}
-
 type CustomerActionKind =
   | "expiring"
   | "expires-today"
@@ -131,85 +120,13 @@ function daysFromDubaiToday(date: string) {
   return Math.round((targetUtc - todayUtc) / 86_400_000);
 }
 
-const initialCustomers: Customer[] = [
-  {
-    id: 1048,
-    name: "Omar Khalid",
-    phone: "971501234567",
-    plate: "Dubai A 45218",
-    buildingNo: "",
-    flatNo: "",
-    parkingNo: "",
-    customerSince: "2026-07-01",
-    plan: "Premium",
-    planStartDate: "2026-07-01",
-    billingType: "monthly",
-    autoInvoice: true,
-    nextInvoiceDate: "2026-08-01",
-    amount: 299,
-    due: "01 Aug 2026",
-    status: "Pending",
-  },
-  {
-    id: 1047,
-    name: "Aisha Rahman",
-    phone: "971522719834",
-    plate: "Dubai L 9921",
-    buildingNo: "",
-    flatNo: "",
-    parkingNo: "",
-    customerSince: "2026-06-15",
-    plan: "Standard",
-    planStartDate: "2026-06-15",
-    billingType: "monthly",
-    autoInvoice: true,
-    nextInvoiceDate: "2026-08-15",
-    amount: 199,
-    due: "01 Aug 2026",
-    status: "Paid",
-  },
-  {
-    id: 1046,
-    name: "Nabil Motors LLC",
-    phone: "971555410882",
-    buildingNo: "",
-    flatNo: "",
-    parkingNo: "",
-    customerSince: "2026-05-01",
-    plate: "Fleet · 8 vehicles",
-    plan: "Corporate",
-    planStartDate: "2026-05-01",
-    billingType: "monthly",
-    autoInvoice: true,
-    nextInvoiceDate: "2026-08-01",
-    amount: 1249,
-    due: "01 Aug 2026",
-    status: "Overdue",
-  },
-  {
-    id: 1045,
-    name: "Hassan Ali",
-    phone: "971504128765",
-    plate: "Sharjah 3 71820",
-    buildingNo: "",
-    flatNo: "",
-    parkingNo: "",
-    customerSince: "2026-07-10",
-    plan: "Basic",
-    planStartDate: "2026-07-10",
-    billingType: "monthly",
-    autoInvoice: true,
-    nextInvoiceDate: "2026-08-10",
-    amount: 99,
-    due: "01 Aug 2026",
-    status: "Pending",
-  },
-];
-
 export function DashboardController() {
   const invoicePaperRef = useRef<HTMLDivElement>(null);
-  const [customers, setCustomers] = useState(initialCustomers);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [query, setQuery] = useState("");
+  const [customerPage, setCustomerPage] = useState(1);
   const [active, setActive] = useState<Customer | null>(null);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
@@ -225,7 +142,7 @@ export function DashboardController() {
     amount: 99,
     billingType: "monthly",
     autoInvoice: true,
-    nextInvoiceDate: calculateNextInvoiceDate(new Date().toISOString().slice(0, 10), "monthly"),
+    nextInvoiceDate: calculateNextBillingDate(new Date().toISOString().slice(0, 10), "monthly"),
     areaId: 0,
     buildingId: 0,
     vehicles: [{ plateNumber: "", makeModel: "", parkingNumber: "", isPrimary: true }],
@@ -315,7 +232,7 @@ export function DashboardController() {
           !settingsResponse.ok ||
           !locationsResponse.ok
         )
-          return;
+          throw new Error("The business data could not be loaded.");
         const [customerRows, planRows, invoiceRows, paymentRows, settingsRow, locationRows] =
           await Promise.all([
             customersResponse.json(),
@@ -438,8 +355,16 @@ export function DashboardController() {
             }),
           ),
         );
-      } catch {
-        setNotice("Database is temporarily unavailable; showing demo records.", "error");
+        setLoadError("");
+      } catch (error) {
+        setCustomers([]);
+        setInvoices([]);
+        setPayments([]);
+        setLoadError(
+          error instanceof Error ? error.message : "The business data could not be loaded.",
+        );
+      } finally {
+        setIsInitialLoading(false);
       }
     }
     void loadDatabaseData();
@@ -561,12 +486,12 @@ export function DashboardController() {
           action = { kind: "payment-pending", label: "Payment pending", invoice };
         } else if (customer.nextInvoiceDate) {
           const days = daysFromDubaiToday(customer.nextInvoiceDate);
-          if (days < 0) action = { kind: "expired", label: "Plan expired" };
-          else if (days === 0) action = { kind: "expires-today", label: "Expires today" };
+          if (days < 0) action = { kind: "expired", label: "Billing date passed" };
+          else if (days === 0) action = { kind: "expires-today", label: "Billing due today" };
           else if (days <= 3)
             action = {
               kind: "expiring",
-              label: `Expires in ${days} day${days === 1 ? "" : "s"}`,
+              label: `Billing due in ${days} day${days === 1 ? "" : "s"}`,
             };
         }
 
@@ -619,6 +544,17 @@ export function DashboardController() {
       }),
     [scopedCustomers, customerView, query],
   );
+  const customerPageSize = 25;
+  const customerTotalPages = Math.max(1, Math.ceil(customerFiltered.length / customerPageSize));
+  const visibleCustomers = customerFiltered.slice(
+    (customerPage - 1) * customerPageSize,
+    customerPage * customerPageSize,
+  );
+
+  useEffect(() => setCustomerPage(1), [customerView, query, selectedAreaId, selectedBuildingId]);
+  useEffect(() => {
+    if (customerPage > customerTotalPages) setCustomerPage(customerTotalPages);
+  }, [customerPage, customerTotalPages]);
 
   function openWhatsApp(customer: Customer) {
     const invoice =
@@ -1102,7 +1038,7 @@ export function DashboardController() {
             amount: plans[0]?.price ?? 0,
             billingType: "monthly",
             autoInvoice: true,
-            nextInvoiceDate: calculateNextInvoiceDate(
+            nextInvoiceDate: calculateNextBillingDate(
               new Date().toISOString().slice(0, 10),
               "monthly",
             ),
@@ -1283,6 +1219,42 @@ export function DashboardController() {
     }
   }
 
+  if (isInitialLoading || loadError) {
+    return (
+      <main className="app-shell">
+        <Sidebar
+          section={section}
+          onNavigate={setSection}
+          activeCustomers={0}
+          actionCount={0}
+          invoiceActionCount={0}
+        />
+        <section className={`content section-${section}`}>
+          <PageHeader
+            section={section}
+            onAddCustomer={() => undefined}
+            onAddPlan={() => undefined}
+            hidePrimaryAction
+          />
+          <section className={`panel ${loadError ? "app-load-error" : "app-loading"}`}>
+            {!loadError && <div className="loading-spinner" />}
+            <h2>{loadError ? "We could not load your data" : "Loading your business data"}</h2>
+            <p>
+              {loadError
+                ? `${loadError} Please check the connection and try again.`
+                : "Please wait a moment. Your records are being prepared."}
+            </p>
+            {loadError && (
+              <button className="primary" onClick={() => window.location.reload()}>
+                Retry
+              </button>
+            )}
+          </section>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <Sidebar
@@ -1302,7 +1274,9 @@ export function DashboardController() {
             openPlanForm();
           }}
           hidePrimaryAction={
-            section === "locations" || (section === "customers" && Boolean(profileCustomer))
+            section === "locations" ||
+            section === "reports" ||
+            (section === "customers" && Boolean(profileCustomer))
           }
         />
         <div className="location-scope-bar">
@@ -1437,13 +1411,13 @@ export function DashboardController() {
                     <th>Location</th>
                     <th>Plan</th>
                     <th>Plan started</th>
-                    <th>Plan expiry</th>
+                    <th>Next billing</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {customerFiltered.map((customer) => (
+                  {visibleCustomers.map((customer) => (
                     <tr
                       key={customer.id}
                       className={
@@ -1481,7 +1455,7 @@ export function DashboardController() {
                         {customer.plan}
                         <small>
                           AED {customer.amount.toFixed(2)} ·{" "}
-                          {customer.billingType.replace("_", " ")}
+                          {formatBillingType(customer.billingType)}
                         </small>
                       </td>
                       <td>
@@ -1502,13 +1476,13 @@ export function DashboardController() {
                                 year: "numeric",
                               },
                             )
-                          : "No automatic expiry"}
+                          : "No automatic billing"}
                         <small>
                           {customer.billingType === "one_time"
-                            ? "One-time service"
+                            ? "Service end date"
                             : customer.autoInvoice
                               ? "Renews automatically"
-                              : "Auto-renewal off"}
+                              : "Automatic billing off"}
                         </small>
                       </td>
                       <td>
@@ -1567,6 +1541,32 @@ export function DashboardController() {
                 <div className="empty-state">No {customerView} customers found.</div>
               )}
             </div>
+            {customerFiltered.length > 0 && (
+              <div className="pagination-bar">
+                <p>
+                  Showing {(customerPage - 1) * customerPageSize + 1}–
+                  {Math.min(customerPage * customerPageSize, customerFiltered.length)} of{" "}
+                  {customerFiltered.length}
+                </p>
+                <div>
+                  <button
+                    disabled={customerPage === 1}
+                    onClick={() => setCustomerPage((page) => page - 1)}
+                  >
+                    Previous
+                  </button>
+                  <button className="active" aria-current="page">
+                    {customerPage}
+                  </button>
+                  <button
+                    disabled={customerPage === customerTotalPages}
+                    onClick={() => setCustomerPage((page) => page + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -1613,6 +1613,14 @@ export function DashboardController() {
 
         {section === "payments" && (
           <PaymentsPage payments={scopedPayments} invoices={scopedInvoices} />
+        )}
+
+        {section === "reports" && (
+          <ReportsPage
+            customers={activeCustomers}
+            invoices={scopedInvoices}
+            payments={scopedPayments}
+          />
         )}
 
         {section === "settings" && (
@@ -1704,7 +1712,9 @@ export function DashboardController() {
                 <h2>Invoices to send</h2>
                 <p>Review, download and share through WhatsApp</p>
               </div>
-              <button className="text-button">View all →</button>
+              <button className="text-button" onClick={() => setSection("invoices")}>
+                View all →
+              </button>
             </div>
             <div className="toolbar">
               <label>
@@ -1716,8 +1726,6 @@ export function DashboardController() {
                   onChange={(event) => setQuery(event.target.value)}
                 />
               </label>
-              <button>All plans⌄</button>
-              <button>All statuses⌄</button>
             </div>
             <div className="table-wrap">
               <table>
@@ -1809,7 +1817,6 @@ export function DashboardController() {
                 <h2>Plan breakdown</h2>
                 <p>Active subscriptions</p>
               </div>
-              <button className="dots">⋯</button>
             </div>
             <div className="donut">
               <div>
@@ -1855,6 +1862,9 @@ export function DashboardController() {
               <button onClick={() => setShowCustomerForm(false)}>×</button>
             </div>
             <form className="customer-form" onSubmit={saveCustomer}>
+              <h3 className="form-section-title">
+                <span>1</span> Customer contact
+              </h3>
               <label>
                 <span>Customer name</span>
                 <input
@@ -1867,6 +1877,9 @@ export function DashboardController() {
                   placeholder="e.g. Ahmed Khan"
                 />
               </label>
+              <h3 className="form-section-title">
+                <span>2</span> Location
+              </h3>
               <label>
                 <span>WhatsApp number</span>
                 <input
@@ -1946,6 +1959,9 @@ export function DashboardController() {
                   placeholder="e.g. 8046"
                 />
               </label>
+              <h3 className="form-section-title">
+                <span>3</span> Vehicles
+              </h3>
               <fieldset className="vehicle-editor">
                 <legend>Vehicles</legend>
                 {customerForm.vehicles.map((vehicle, index) => (
@@ -2036,6 +2052,9 @@ export function DashboardController() {
                   + Add another vehicle
                 </button>
               </fieldset>
+              <h3 className="form-section-title">
+                <span>4</span> Plan and billing
+              </h3>
               <label>
                 <span>Subscription plan</span>
                 <select
@@ -2080,7 +2099,7 @@ export function DashboardController() {
                       ...customerForm,
                       billingType,
                       autoInvoice: billingType !== "manual",
-                      nextInvoiceDate: calculateNextInvoiceDate(
+                      nextInvoiceDate: calculateNextBillingDate(
                         customerForm.planStartDate,
                         billingType,
                       ),
@@ -2103,7 +2122,7 @@ export function DashboardController() {
                     setCustomerForm({
                       ...customerForm,
                       planStartDate: event.target.value,
-                      nextInvoiceDate: calculateNextInvoiceDate(
+                      nextInvoiceDate: calculateNextBillingDate(
                         event.target.value,
                         customerForm.billingType,
                       ),
@@ -2114,7 +2133,11 @@ export function DashboardController() {
               {customerForm.billingType !== "manual" && (
                 <>
                   <label>
-                    <span>Plan expiry / next renewal date</span>
+                    <span>
+                      {customerForm.billingType === "one_time"
+                        ? "Service end date"
+                        : "Next billing date"}
+                    </span>
                     <input
                       required
                       type="date"
@@ -2551,8 +2574,8 @@ export function DashboardController() {
                       </strong>
                       <small>
                         {activeInvoice?.billingType
-                          ? `${activeInvoice.billingType.replace("_", " ")} billing`
-                          : `${active.billingType.replace("_", " ")} billing`}
+                          ? `${formatBillingType(activeInvoice.billingType)} billing`
+                          : `${formatBillingType(active.billingType)} billing`}
                       </small>
                     </td>
                     <td>1</td>

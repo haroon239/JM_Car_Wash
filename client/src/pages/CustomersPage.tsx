@@ -1,4 +1,5 @@
 import type { Customer, CustomerView } from "../types/domain";
+import { formatBillingType } from "../utils/display";
 type Props = {
   customers: Customer[];
   activeCount: number;
@@ -47,7 +48,7 @@ export function CustomersPage(p: Props) {
               <th>WhatsApp</th>
               <th>Plan</th>
               <th>Plan started</th>
-              <th>Plan expiry</th>
+              <th>Next billing</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -73,7 +74,9 @@ export function CustomersPage(p: Props) {
                 <td>{c.phone}</td>
                 <td>
                   {c.plan}
-                  <small>AED {c.amount.toFixed(2)}/month</small>
+                  <small>
+                    AED {c.amount.toFixed(2)} · {formatBillingType(c.billingType)}
+                  </small>
                 </td>
                 <td>
                   {c.planStartDate
@@ -91,13 +94,13 @@ export function CustomersPage(p: Props) {
                         month: "short",
                         year: "numeric",
                       })
-                    : "No automatic expiry"}
+                    : "No automatic billing"}
                   <small>
                     {c.billingType === "one_time"
-                      ? "One-time service"
+                      ? "Service end date"
                       : c.autoInvoice
                         ? "Renews automatically"
-                        : "Auto-renewal off"}
+                        : "Automatic billing off"}
                   </small>
                 </td>
                 <td>

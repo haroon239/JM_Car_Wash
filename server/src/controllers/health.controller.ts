@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { isDatabaseConnected } from "../config/database.js";
+import { billingMaintenanceStatus } from "../services/billing.service.js";
 
 export async function healthCheck(_request: Request, response: Response) {
   let database = false;
@@ -8,5 +9,10 @@ export async function healthCheck(_request: Request, response: Response) {
   } catch {
     database = false;
   }
-  response.json({ ok: true, service: "jm-car-wash-api", database });
+  response.json({
+    ok: database,
+    service: "jm-car-wash-api",
+    database,
+    billing: billingMaintenanceStatus,
+  });
 }

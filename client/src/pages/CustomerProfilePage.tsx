@@ -66,7 +66,7 @@ export function CustomerProfilePage({
         </div>
         <div className="profile-actions">
           <button className="secondary" onClick={onEdit}>
-            Edit customer 
+            Edit customer
           </button>
           <button className="whatsapp" onClick={onWhatsApp}>
             WhatsApp

@@ -11,6 +11,7 @@
     "build": "npm run build -w client && npm run build -w server",
     "start": "node server/dist/scripts/migrate.js && node server/dist/server.js",
     "typecheck": "npm run typecheck -w client && npm run typecheck -w server",
+    "test": "npm run test -w client",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

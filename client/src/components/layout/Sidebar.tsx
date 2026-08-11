@@ -13,6 +13,7 @@ const items: [Section, string, string][] = [
   ["plans", "◇", "Plans"],
   ["invoices", "▤", "Invoices"],
   ["payments", "◷", "Payment history"],
+  ["reports", "▥", "Reports & export"],
   ["settings", "⚙", "Settings"],
 ];
 export function Sidebar({
@@ -52,7 +53,6 @@ export function Sidebar({
           <strong>Haroon Ahmed</strong>
           <small>Administrator</small>
         </div>
-        <button>⋮</button>
       </div>
     </aside>
   );
